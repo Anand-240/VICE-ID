@@ -16,3 +16,20 @@
 .mobile-jump{width:62px;height:62px;border-radius:50%;border:1px solid #52d7e8;background:rgba(8,11,18,.78);font:6px 'IBM Plex Mono',monospace;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}.mobile-jump svg{width:15px}
 @media(max-width:900px){.motion-hud{right:10px;bottom:184px}.mobile-game-controls>div:last-child{gap:6px}.mobile-jump,.mobile-run,.mobile-interact{width:56px;height:56px}}
 @media(max-width:620px){.motion-hud{right:10px;bottom:244px;width:176px}.motion-hud>span:first-child>b{font-size:14px}}
+
+/* Readable instrument panels with a consistent visual hierarchy. */
+.game-hud,.motion-hud,.awareness-hud{border-radius:4px;background:linear-gradient(135deg,rgba(9,16,27,.94),rgba(17,27,42,.88));border-color:rgba(183,204,224,.28)}
+.identity-hud{padding:10px;gap:12px}.identity-hud img{width:48px;height:52px;border-radius:2px}.identity-hud small,.identity-hud em{font-size:9px;color:#a0b2c5;letter-spacing:.06em}.identity-hud b{font-size:13px}
+.stats-hud span{font-size:9px;padding:12px;gap:6px;color:#a0b2c5}.stats-hud b{font-size:15px}
+.awareness-hud{width:230px;padding:11px 12px}.awareness-hud span{font-size:9px}.awareness-hud i{height:4px;margin-top:8px}
+.objective-hud{top:104px;max-width:300px;padding:10px 12px;background:linear-gradient(90deg,rgba(7,13,23,.82),transparent)}.objective-hud small{font-size:9px}.objective-hud>b{font-size:11px;line-height:1.5}.objective-hud i{font-size:9px}
+.game-notification{top:104px;width:290px;border-radius:3px;padding:14px}.game-notification span{font-size:10px;line-height:1.6;color:#b2bfd0}.game-notification b{font-size:11px}
+.motion-hud{width:238px;padding:12px}.motion-hud small,.motion-hud em,.motion-hud>span:first-child>b em{font-size:8px;color:#adbdcf}.motion-hud>span:first-child>b{font-size:23px}.motion-hud i{height:4px;margin:4px 0}
+.interaction-prompt{bottom:152px;border-radius:3px}.interaction-prompt span,.finish-district{font-size:10px}.interaction-prompt kbd,.game-tutorial kbd{font-size:11px}
+.game-corner-actions button{width:42px;height:42px;border-radius:3px}.finish-district{right:72px;min-height:42px}
+.game-tutorial span b,.game-tutorial>small{font-size:9px}.game-tutorial>div{gap:22px}.game-tutorial>small{line-height:1.7;color:#acbacb}
+.pursuit-strip>span{font-size:10px}.pursuit-strip>span b{font-size:11px}
+@media(max-width:1100px){.awareness-hud{top:104px;right:18px;left:auto;transform:none}.game-notification{top:172px}.pursuit-strip{top:246px}}
+@media(max-width:900px){.identity-hud{left:10px;top:10px}.stats-hud{top:82px;right:10px}.awareness-hud{top:10px;right:10px;width:210px}.objective-hud{top:96px;max-width:260px}.game-notification{top:158px}.motion-hud{bottom:170px;right:10px}.finish-district{right:64px;bottom:112px}.interaction-prompt{bottom:266px}.pursuit-strip{top:240px}}
+@media(max-width:620px){.identity-hud img{width:38px;height:42px}.identity-hud small,.identity-hud em{font-size:8px}.identity-hud b{font-size:11px}.stats-hud{top:82px;left:10px;right:10px}.stats-hud span{padding:7px 10px;font-size:8px}.stats-hud b{font-size:12px}.awareness-hud{top:143px;left:10px;right:10px;width:auto}.objective-hud{top:204px;max-width:calc(100% - 20px)}.game-notification{top:280px;left:10px;right:10px;width:auto;padding:10px}.game-notification span{font-size:9px}.motion-hud{width:190px;bottom:170px}.motion-hud>span:first-child>b{font-size:19px}.motion-hud small,.motion-hud em{font-size:7px}.pursuit-strip{top:auto;bottom:350px}.game-tutorial>div{gap:12px}.interaction-prompt{bottom:264px}}
+@media(max-height:650px){.game-notification{display:none}.district-game{min-height:100svh}.game-tutorial,.pause-menu,.district-summary{max-height:calc(100svh - 24px);overflow-y:auto}.objective-hud{max-width:240px}.motion-hud{bottom:164px}}
