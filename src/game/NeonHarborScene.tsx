@@ -477,10 +477,16 @@ function PoliceOfficer({ position, playerPosition, active, awareness, onDetect, 
     const dx = player.x - position.x;
     const dz = player.z - position.z;
     const dist = Math.hypot(dx, dz);
-    if (pursuitActive && dist > 2.2) {
-      const blend = 1 - Math.exp(-delta * 6.5);
-      rb.setLinvel({ x: THREE.MathUtils.lerp(velocity.x, dx / dist * 2.15, blend), y: velocity.y, z: THREE.MathUtils.lerp(velocity.z, dz / dist * 2.15, blend) }, true);
-      node.rotation.y = THREE.MathUtils.damp(node.rotation.y, Math.atan2(dx, dz), 8, delta);
+    const sightLine = hasLineOfSight(position.x, position.z, player.x, player.z, blockers);
+    const facingPlayer = dist ? (Math.sin(node.rotation.y) * dx + Math.cos(node.rotation.y) * dz) / dist : 1;
+    const approaching = awareness >= 55 && dist < 17 && facingPlayer > .28 && sightLine;
+    const urgency = THREE.MathUtils.clamp((awareness - 55) / 45, 0, 1);
+    // Escalate from a brisk approach to a chase; player sprint remains faster.
+    const speed = pursuitActive ? 4.8 + .7 * urgency : 2.6 + 2.2 * urgency;
+    if ((pursuitActive || approaching) && dist > 2.2) {
+      const blend = 1 - Math.exp(-delta * (8 + 4 * urgency));
+      rb.setLinvel({ x: THREE.MathUtils.lerp(velocity.x, dx / dist * speed, blend), y: velocity.y, z: THREE.MathUtils.lerp(velocity.z, dz / dist * speed, blend) }, true);
+      node.rotation.y = THREE.MathUtils.damp(node.rotation.y, Math.atan2(dx, dz), 10, delta);
       moving.current = true;
     } else { const stop = 1 - Math.exp(-delta * 10); rb.setLinvel({ x: THREE.MathUtils.lerp(velocity.x, 0, stop), y: velocity.y, z: THREE.MathUtils.lerp(velocity.z, 0, stop) }, true); node.rotation.y += delta * .16; moving.current = false; }
     timer.current += delta;
@@ -489,11 +495,11 @@ function PoliceOfficer({ position, playerPosition, active, awareness, onDetect, 
     const forwardX = Math.sin(node.rotation.y);
     const forwardZ = Math.cos(node.rotation.y);
     const dot = dist ? (forwardX * dx + forwardZ * dz) / dist : 1;
-    const visible = dist < 17 && dot > .28 && hasLineOfSight(position.x, position.z, player.x, player.z, blockers);
-    onDetect(visible, pursuitActive && dist < 2.35 && hasLineOfSight(position.x, position.z, player.x, player.z, blockers), officer);
+    const visible = dist < 17 && dot > .28 && sightLine;
+    onDetect(visible, pursuitActive && dist < 2.35 && sightLine, officer);
   });
   if (!active) return null;
-  return <RigidBody ref={body} position={[position[0], .82, position[2]]} colliders={false} enabledRotations={[false, false, false]} linearDamping={10} angularDamping={10} friction={1.2} restitution={0} mass={1.05} canSleep={false} ccd>
+  return <RigidBody ref={body} position={[position[0], .82, position[2]]} colliders={false} enabledRotations={[false, false, false]} linearDamping={.35} angularDamping={10} friction={1.2} restitution={0} mass={1.05} canSleep={false} ccd>
     <CapsuleCollider args={[.46, .34]} friction={1.2} restitution={0} />
     <group ref={visual} position={[0, -.8, 0]}><Humanoid color="#243d62" skin="#a86e52" police variant={2} moving={moving} /><Html center position={[0, 2.05, 0]} distanceFactor={12}><div className="npc-tag police">VMPD</div></Html></group>
   </RigidBody>;
