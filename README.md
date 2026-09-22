@@ -10,9 +10,9 @@ VICE ID is designed as an in-world game feature rather than a standalone image g
 
 ## Submission
 
-- **Live experience:** [Add deployed URL]
-- **Source code:** [Add public GitHub URL]
-- **Walkthrough:** [Add video or screenshots URL]
+- **Live experience:** [viceid.vercel.app](https://viceid.vercel.app)
+- **Source code:** [github.com/Anand-240/VICE-ID](https://github.com/Anand-240/VICE-ID)
+- **Walkthrough:** Follow the quick judging path below
 - **Challenge:** Build with React Image Editor
 - **Hashtag:** **#BuiltWithImageEditor**
 
@@ -113,7 +113,7 @@ Every selectable location opens a working 3D district with its own layout, visua
 - Downtown Vice;
 - South Point.
 
-The scene uses React Three Fiber, Three.js, and Rapier physics. The player can walk or run, rotate the camera, collide with the environment, inspect their exact poster in the world, encounter roaming NPCs, and attract police attention.
+The scene uses React Three Fiber, Three.js, and Rapier physics. Movement has progressive acceleration and braking, air control, gravity, grounded-only jumping, collision-aware camera placement, and a stamina-limited sprint. Live velocity, traction, airborne state, and stamina are surfaced in the HUD rather than being decorative values. The player can inspect their exact poster in the world, encounter roaming NPCs, and attract police attention.
 
 At 100% police awareness, the experience triggers an active response: the player can run and break line of sight or surrender. The result updates the shared city state, police dossier, social reactions, and final identity.
 
@@ -182,6 +182,7 @@ This project does not include Rockstar logos, official GTA characters, copied ma
 |---|---|---|
 | Move | WASD or arrow keys | Direction pad |
 | Run | Hold Shift | Run button |
+| Jump | Space | Jump button |
 | Rotate camera | Drag pointer | Drag |
 | Inspect nearby poster | E | Use button |
 | Pause | Escape or pause button | Pause button |

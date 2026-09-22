@@ -1,11 +1,18 @@
 import { Html, Sky, useTexture } from '@react-three/drei';
-import { CuboidCollider, CapsuleCollider, Physics, RigidBody, type RapierRigidBody } from '@react-three/rapier';
+import { CuboidCollider, CapsuleCollider, Physics, RigidBody, useRapier, type RapierRigidBody } from '@react-three/rapier';
 import { useFrame, useThree } from '@react-three/fiber';
 import { createContext, useContext, memo, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import * as THREE from 'three';
 import { getDistrictTheme, type DistrictTheme } from './districts';
 
 export type ControlState = Record<string, boolean>;
+
+export interface MotionTelemetry {
+  speed: number;
+  stamina: number;
+  grounded: boolean;
+  sprinting: boolean;
+}
 
 export interface SceneSignals {
   elapsed: number;
@@ -28,6 +35,7 @@ interface SceneProps {
   signals: SceneSignals;
   onNearPoster: (near: boolean) => void;
   onPosition: (x: number, z: number, heading: number) => void;
+  onMotion: (motion: MotionTelemetry) => void;
   onRecognize: (id: string, role: string, influencer: boolean) => void;
   onPoliceDetect: (visible: boolean, caught: boolean, officer: string) => void;
   onReady: () => void;
@@ -108,24 +116,32 @@ const Humanoid = memo(function Humanoid({ color, skin = '#b9785d', police = fals
   </group>;
 });
 
-function Player({ controls, cameraYaw, cameraPitch, paused, playerPosition, onNearPoster, onPosition, spawn }: Pick<SceneProps, 'controls' | 'cameraYaw' | 'cameraPitch' | 'onNearPoster' | 'onPosition'> & { paused: boolean; playerPosition: MutableRefObject<THREE.Vector3>; spawn: [number, number] }) {
+function Player({ controls, cameraYaw, cameraPitch, paused, playerPosition, onNearPoster, onPosition, onMotion, spawn }: Pick<SceneProps, 'controls' | 'cameraYaw' | 'cameraPitch' | 'onNearPoster' | 'onPosition' | 'onMotion'> & { paused: boolean; playerPosition: MutableRefObject<THREE.Vector3>; spawn: [number, number] }) {
   const blockers = useContext(BlockersContext);
   const body = useRef<RapierRigidBody>(null);
   const model = useRef<THREE.Group>(null);
   const { camera } = useThree();
+  const { world, rapier } = useRapier();
   const nearRef = useRef(false);
   const syncClock = useRef(0);
   const movingRef = useRef(false);
+  const jumpHeld = useRef(false);
+  const sprintExhausted = useRef(false);
+  const stamina = useRef(100);
   const targetCamera = useMemo(() => new THREE.Vector3(), []);
   const targetLook = useMemo(() => new THREE.Vector3(), []);
+  const cameraOrigin = useMemo(() => new THREE.Vector3(), []);
+  const cameraDirection = useMemo(() => new THREE.Vector3(), []);
 
   useFrame((_, delta) => {
     const rb = body.current;
     if (!rb) return;
     const pos = rb.translation();
-    if (pos.y < -3) { rb.setTranslation({ x: spawn[0], y: .84, z: spawn[1] }, true); rb.setLinvel({ x: 0, y: 0, z: 0 }, true); return; }
+    if (pos.y < -3) { rb.setTranslation({ x: spawn[0], y: .84, z: spawn[1] }, true); rb.setLinvel({ x: 0, y: 0, z: 0 }, true); stamina.current = 100; return; }
     playerPosition.current.set(pos.x, pos.y, pos.z);
     const current = rb.linvel();
+    const groundHit = world.castRay(new rapier.Ray({ x: pos.x, y: pos.y - .58, z: pos.z }, { x: 0, y: -1, z: 0 }), .32, true, undefined, undefined, undefined, rb);
+    const grounded = Boolean(groundHit && groundHit.timeOfImpact <= .3);
     let x = 0;
     let z = 0;
     if (!paused) {
@@ -135,7 +151,13 @@ function Player({ controls, cameraYaw, cameraPitch, paused, playerPosition, onNe
       if (controls.current.d || controls.current.arrowright) x += 1;
     }
     const moving = x !== 0 || z !== 0;
-    movingRef.current = moving;
+    if (stamina.current <= .5) sprintExhausted.current = true;
+    if (stamina.current >= 25) sprintExhausted.current = false;
+    const wantsSprint = moving && grounded && controls.current.shift && !sprintExhausted.current;
+    stamina.current = THREE.MathUtils.clamp(stamina.current + delta * (wantsSprint ? -17 : grounded ? 12 : 7), 0, 100);
+    const sprinting = wantsSprint && stamina.current > 0;
+    let targetX = 0;
+    let targetZ = 0;
     if (moving) {
       const length = Math.hypot(x, z);
       x /= length; z /= length;
@@ -146,20 +168,29 @@ function Player({ controls, cameraYaw, cameraPitch, paused, playerPosition, onNe
       const rightZ = -Math.sin(yaw);
       const moveX = forwardX * z + rightX * x;
       const moveZ = forwardZ * z + rightZ * x;
-      const speed = controls.current.shift ? 6.4 : 3.7;
-      rb.setLinvel({ x: moveX * speed, y: current.y, z: moveZ * speed }, true);
+      const speed = sprinting ? 6.5 : 3.75;
+      targetX = moveX * speed;
+      targetZ = moveZ * speed;
       if (model.current) {
         const angle = Math.atan2(moveX, moveZ);
         e.set(0, angle, 0); q.setFromEuler(e);
         model.current.quaternion.slerp(q, 1 - Math.exp(-delta * 12));
-        model.current.position.y = -.8 + Math.abs(Math.sin(performance.now() * .009)) * .025;
+        model.current.position.y = -.8 + (grounded ? Math.abs(Math.sin(performance.now() * (sprinting ? .013 : .009))) * .025 : 0);
       }
-    } else {
-      rb.setLinvel({ x: 0, y: current.y, z: 0 }, true);
-      if (model.current) model.current.position.y = THREE.MathUtils.damp(model.current.position.y, -.8, 12, delta);
-    }
+    } else if (model.current) model.current.position.y = THREE.MathUtils.damp(model.current.position.y, -.8, 12, delta);
 
-    const runPullback = controls.current.shift && moving ? 1 : 0;
+    const responsiveness = grounded ? (moving ? 10 : 15) : (moving ? 2.2 : .8);
+    const blend = 1 - Math.exp(-responsiveness * delta);
+    const nextX = THREE.MathUtils.lerp(current.x, targetX, blend);
+    const nextZ = THREE.MathUtils.lerp(current.z, targetZ, blend);
+    const jumpPressed = Boolean(controls.current[' ']);
+    const jumpNow = jumpPressed && !jumpHeld.current && grounded && !paused;
+    jumpHeld.current = jumpPressed;
+    rb.setLinvel({ x: nextX, y: jumpNow ? 5.1 : current.y, z: nextZ }, true);
+    const planarSpeed = Math.hypot(nextX, nextZ);
+    movingRef.current = planarSpeed > .18 && grounded;
+
+    const runPullback = sprinting ? 1 : 0;
     const distance = 6.2 + runPullback;
     const horizontal = Math.cos(cameraPitch.current) * distance;
     const shoulderX = Math.cos(cameraYaw.current) * .48;
@@ -168,9 +199,21 @@ function Player({ controls, cameraYaw, cameraPitch, paused, playerPosition, onNe
     if (Array.from(blockers.values()).some((box) => targetCamera.x > box.x - box.w / 2 && targetCamera.x < box.x + box.w / 2 && targetCamera.z > box.z - box.d / 2 && targetCamera.z < box.z + box.d / 2)) {
       targetCamera.lerp(new THREE.Vector3(pos.x, pos.y + 1.8, pos.z), .55);
     }
+    cameraOrigin.set(pos.x, pos.y + .92, pos.z);
+    cameraDirection.copy(targetCamera).sub(cameraOrigin);
+    const cameraDistance = cameraDirection.length();
+    if (cameraDistance > .01) {
+      cameraDirection.normalize();
+      const cameraHit = world.castRay(new rapier.Ray(cameraOrigin, cameraDirection), cameraDistance, true, undefined, undefined, undefined, rb);
+      if (cameraHit) targetCamera.copy(cameraOrigin).addScaledVector(cameraDirection, Math.max(.55, cameraHit.timeOfImpact - .24));
+    }
     camera.position.lerp(targetCamera, 1 - Math.exp(-delta * 7));
     targetLook.set(pos.x, pos.y + .78, pos.z);
     camera.lookAt(targetLook);
+    if (camera instanceof THREE.PerspectiveCamera) {
+      const nextFov = THREE.MathUtils.damp(camera.fov, sprinting ? 63 : 58, 5, delta);
+      if (Math.abs(nextFov - camera.fov) > .01) { camera.fov = nextFov; camera.updateProjectionMatrix(); }
+    }
 
     syncClock.current += delta;
     if (syncClock.current > .12) {
@@ -178,10 +221,11 @@ function Player({ controls, cameraYaw, cameraPitch, paused, playerPosition, onNe
       const near = POSTERS.some(([px, pz]) => Math.hypot(pos.x - px, pos.z - pz) < 3.1);
       if (near !== nearRef.current) { nearRef.current = near; onNearPoster(near); }
       onPosition(pos.x, pos.z, model.current?.rotation.y || 0);
+      onMotion({ speed: planarSpeed, stamina: stamina.current, grounded, sprinting });
     }
   });
 
-  return <RigidBody ref={body} position={[spawn[0], .84, spawn[1]]} colliders={false} enabledRotations={[false, false, false]} linearDamping={12} angularDamping={12} friction={1.2} gravityScale={1.35} canSleep={false} ccd>
+  return <RigidBody ref={body} position={[spawn[0], .84, spawn[1]]} colliders={false} enabledRotations={[false, false, false]} linearDamping={.35} angularDamping={12} friction={1.2} gravityScale={1.35} canSleep={false} ccd>
     <CapsuleCollider args={[.46, .34]} friction={1.2} restitution={0} />
     <mesh position={[0, -.795, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={2}><circleGeometry args={[.42, 24]} /><meshBasicMaterial color="#05060a" transparent opacity={.48} depthWrite={false} /></mesh>
     <group ref={model} position={[0, -.8, 0]}><Humanoid color="#d43f72" skin="#a9654b" variant={0} moving={movingRef} /><mesh castShadow position={[0, 1.03, -.22]}><boxGeometry args={[.34, .48, .09]} /><meshStandardMaterial color="#141a28" metalness={.12} roughness={.5} /></mesh><mesh position={[0, 1.05, -.272]}><planeGeometry args={[.17, .22]} /><meshStandardMaterial color="#26c6d9" emissive="#126474" emissiveIntensity={.45} /></mesh></group>
@@ -389,10 +433,11 @@ function Civilian({ data, playerPosition, posterActive, onRecognize, paused, ali
     const dist = Math.hypot(dx, dz);
     if (dist < .35) target.current = (target.current + 1) % points.length;
     else if (!speech) {
-      rb.setLinvel({ x: dx / dist * data.speed, y: velocity.y, z: dz / dist * data.speed }, true);
+      const blend = 1 - Math.exp(-delta * 5.5);
+      rb.setLinvel({ x: THREE.MathUtils.lerp(velocity.x, dx / dist * data.speed, blend), y: velocity.y, z: THREE.MathUtils.lerp(velocity.z, dz / dist * data.speed, blend) }, true);
       node.rotation.y = THREE.MathUtils.damp(node.rotation.y, Math.atan2(dx, dz), 9, delta);
       moving.current = true;
-    } else { rb.setLinvel({ x: 0, y: velocity.y, z: 0 }, true); moving.current = false; }
+    } else { const stop = 1 - Math.exp(-delta * 12); rb.setLinvel({ x: THREE.MathUtils.lerp(velocity.x, 0, stop), y: velocity.y, z: THREE.MathUtils.lerp(velocity.z, 0, stop) }, true); moving.current = false; }
     decision.current += delta;
     if (decision.current < .2 || reacted.current || !posterActive) return;
     decision.current = 0;
@@ -433,10 +478,11 @@ function PoliceOfficer({ position, playerPosition, active, awareness, onDetect, 
     const dz = player.z - position.z;
     const dist = Math.hypot(dx, dz);
     if (pursuitActive && dist > 2.2) {
-      rb.setLinvel({ x: dx / dist * 2.15, y: velocity.y, z: dz / dist * 2.15 }, true);
+      const blend = 1 - Math.exp(-delta * 6.5);
+      rb.setLinvel({ x: THREE.MathUtils.lerp(velocity.x, dx / dist * 2.15, blend), y: velocity.y, z: THREE.MathUtils.lerp(velocity.z, dz / dist * 2.15, blend) }, true);
       node.rotation.y = THREE.MathUtils.damp(node.rotation.y, Math.atan2(dx, dz), 8, delta);
       moving.current = true;
-    } else { rb.setLinvel({ x: 0, y: velocity.y, z: 0 }, true); node.rotation.y += delta * .16; moving.current = false; }
+    } else { const stop = 1 - Math.exp(-delta * 10); rb.setLinvel({ x: THREE.MathUtils.lerp(velocity.x, 0, stop), y: velocity.y, z: THREE.MathUtils.lerp(velocity.z, 0, stop) }, true); node.rotation.y += delta * .16; moving.current = false; }
     timer.current += delta;
     if (timer.current < .18) return;
     timer.current = 0;
@@ -510,8 +556,8 @@ export function NeonHarborScene(props: SceneProps) {
   const playerPosition = useRef(new THREE.Vector3(theme.spawn[0], 1, theme.spawn[1]));
   const blockers = useMemo(() => new Map<string, Box2D>(), []);
   useEffect(() => { props.onReady(); }, [props.onReady]);
-  return <BlockersContext.Provider value={blockers}><Physics paused={props.signals.paused} gravity={[0, -9.81, 0]} timeStep="vary">
+  return <BlockersContext.Provider value={blockers}><Physics paused={props.signals.paused} gravity={[0, -9.81, 0]} timeStep={1 / 60} interpolate>
     <World alias={props.alias} posterUrl={props.posterUrl} district={props.district} signals={props.signals} playerPosition={playerPosition} onRecognize={props.onRecognize} onPoliceDetect={props.onPoliceDetect} />
-    <Player controls={props.controls} cameraYaw={props.cameraYaw} cameraPitch={props.cameraPitch} paused={props.signals.paused} playerPosition={playerPosition} spawn={theme.spawn} onNearPoster={props.onNearPoster} onPosition={props.onPosition} />
+    <Player controls={props.controls} cameraYaw={props.cameraYaw} cameraPitch={props.cameraPitch} paused={props.signals.paused} playerPosition={playerPosition} spawn={theme.spawn} onNearPoster={props.onNearPoster} onPosition={props.onPosition} onMotion={props.onMotion} />
   </Physics></BlockersContext.Provider>;
 }

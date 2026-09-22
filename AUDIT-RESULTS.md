@@ -9,9 +9,9 @@ Audit started September 22, 2026. This is the post-fix report; see AUDIT-BASELIN
 | 1. Original GTA VI-inspired experience | PASS (product implementation) | `src/App.tsx` identity/dossier/city/feed; `src/game/NeonHarborScene.tsx` original procedural world; `districts.ts` seven configurations. No official GTA models/logos found. Asset provenance still requires owner confirmation. |
 | 2. React Image Editor is core | PASS | `package.json`, installed `@unlayer/react-image-editor@1.0.2`, `src/components/editor/ViceImageEditor.tsx`, `App.tsx:Studio/Poster`. Removing it breaks visual editing and the normal lock/export flow. Official upstream: https://github.com/unlayer/react-image-editor. |
 | 3. User-controlled visual editing | PASS | Browser uploaded a portrait, created and edited text to “AUDIT VERIFIED”, saved, locked, generated/published a poster, and downloaded a final card visibly retaining the edit. All eight native tools produced changed exported output in individual checks. |
-| 4. Public GitHub repository and clear README | PARTIAL | README corrected with architecture, actual walkthrough, editor integration, build/deploy instructions, credits and link placeholders. No `.git` directory/public repository URL exists in this workspace. Publish/review the repository. |
-| 5. Deployed working live link | PARTIAL / NOT YET COMPLETE | `npm run build` and local production preview passed. No public deployment URL exists. Test the actual deployed origin before claiming this complete. |
-| 6. Prepare public X/LinkedIn share | PASS (preparation only) | `SUBMISSION.md` contains a usable draft with `#BuiltWithImageEditor`; README includes hashtag. No post was published or verified. Replace link placeholders and publish it. |
+| 4. Public GitHub repository and clear README | PASS | Public repository verified at https://github.com/Anand-240/VICE-ID (HTTP 200). README documents the idea, editor integration, journey, architecture, setup, testing, deployment, originality and challenge hashtag. Push the latest local README revision if it is not yet on `main`. |
+| 5. Deployed working live link | PASS (tested flow) | https://viceid.vercel.app returned HTTP 200. A real browser completed upload → production editor filter → lock → poster → publish → ViceFeed → final PNG download → share fallback → restart. Unlayer embed/runtime returned HTTP 200. |
+| 6. Prepare public X/LinkedIn share | PARTIAL | README includes `#BuiltWithImageEditor`, but no public X/LinkedIn post was verified. Prepare and publish the final post with the live and repository links. |
 | 7. Submission before September 24, 23:59 UTC | NOT VERIFIED | Deadline supplied by the audit document, not independently confirmed against an entry page. Equivalent IST time is September 25, 05:29. No entry receipt or completed submission available. |
 
 ## B. CORE PRODUCT FLOW
@@ -70,7 +70,7 @@ Full edited-image browser journey (without optional gameplay): upload → edit t
 
 ### Public repository safety
 
-Inspected source/config contains no matching API-token/private-key literals; no application environment variables needed. Added `.env`/`.env.*` ignore rules while allowing `.env.example`. Dependencies/build artifacts already ignored. No Git repository/history exists, so committed-file/history safety cannot be certified. No app license selected. README's generated-art provenance claim was retained with an explicit owner-verification caveat; this audit is not a rights clearance.
+Inspected source/config contains no matching API-token/private-key literals; no application environment variables are needed. Added `.env`/`.env.*` ignore rules while allowing `.env.example`. Dependencies/build artifacts are ignored. The local `main` branch is connected to `https://github.com/Anand-240/VICE-ID.git`; the current working source was inspected, but the full commit history was not exhaustively audited for removed secrets. No app license is selected. README identifies the visual assets as project-specific generated artwork; this audit is not an independent rights clearance.
 
 ## D. REACT IMAGE EDITOR VERIFICATION
 
@@ -96,9 +96,9 @@ The editor is central: Studio exports `editedImage`, Poster exports `wantedPoste
 
 ## E. CRITICAL BLOCKERS
 
-1. No public GitHub repository URL, deployed live URL, or completed submission evidence. Local production success is insufficient for public entry verification.
-2. Actual deployed-origin editor/CDN/export behavior and physical-phone usability remain unverified. Complete at least one real desktop/mobile judging walkthrough before publishing the submission.
-3. Confirm asset provenance/publication rights and select the intended project license before public release. No official GTA assets were added by this audit.
+1. No completed public X/LinkedIn post or challenge-entry receipt has been verified.
+2. Physical-phone usability remains unverified. Complete at least one real mobile judging walkthrough before submitting.
+3. Confirm asset provenance/publication rights and select the intended project license. No official GTA assets were added by this audit.
 
 ## F. IMPORTANT POLISH ISSUES
 
@@ -131,8 +131,9 @@ Instance repeated 3D geometry, reduce lights/shadows after profiling, optimize I
 
 - [x] Repair core editor/save/persistence/error paths and verify a real edited-image journey.
 - [x] Build and run deterministic regression tests; verify local production edit/export.
-- [ ] Confirm rights/license, publish a reviewed public repository and put the actual URL in README.
-- [ ] Deploy, test the public URL end to end, and test a physical phone.
+- [ ] Confirm rights/license and push the latest reviewed README to the public repository.
+- [x] Deploy and test the public URL end to end.
+- [ ] Test the public deployment on a physical phone.
 - [ ] Publish the prepared hashtag post and submit before the verified official deadline.
 
 ### P1 — before claiming complete functionality
@@ -148,7 +149,7 @@ Instance repeated 3D geometry, reduce lights/shadows after profiling, optimize I
 
 ## I. SUBMISSION READINESS
 
-**NOT READY TO SUBMIT.** The repaired core local flow works, the official editor is genuinely central, all eight tools produced edited output, both generated exports were verified as nonblank 1080×1350 PNGs, seven districts loaded, and controlled police actions update shared state. However, public repository/deployment/entry evidence is missing and physical-device/certain advanced interactions remain unverified. No claim of “100% functional” is warranted.
+**NOT READY TO SUBMIT.** The public repository and live deployment are now reachable, and the deployed app passed the production upload → editor → poster → publish → final-download flow. The official editor is genuinely central, all eight tools produced edited output locally, both generated exports were verified as nonblank 1080×1350 PNGs, seven districts loaded, and controlled police actions update shared state. However, the public social post/challenge entry, asset-rights confirmation, physical-device checks and certain advanced interactions remain unverified. No claim of “100% functional” is warranted.
 
 This is **B: an interactive identity/reputation/world-response experience**, not merely a poster generator. Code evidence: `publishPoster` creates district state/events; `simulateHour` evolves shared metrics; `completeDistrict` writes gameplay consequences; dossier, Feed and final card consume those values and the user's edited imagery. The fictional police/social identity loop plausibly fits a GTA-inspired in-world activity, while the implementation remains an original small local simulation.
 
