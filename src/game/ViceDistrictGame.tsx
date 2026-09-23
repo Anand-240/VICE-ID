@@ -8,6 +8,7 @@ import type { DistrictOutcome } from '../types/character';
 import { NeonHarborScene, type ControlState, type MotionTelemetry } from './NeonHarborScene';
 import { getDistrictTheme } from './districts';
 import './game.css';
+import { advanceAwareness, type PoliceDetection, type ReportedLocation, type Point } from './police';
 import { DistrictMinimap } from './DistrictMinimap';
 
 interface Props { onContinue: () => void; onReturn: () => void; }
@@ -33,8 +34,12 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
   const recognized = useRef(new Set<string>());
   const completed = useRef(false);
   const pursuitTriggered = useRef(false);
-  const detections = useRef(new Map<string, { visible: boolean; at: number }>());
-  const graceUntil = useRef(0);
+  const detections = useRef(new Map<string, PoliceDetection & { at: number }>());
+  const graceRemaining = useRef(0);
+  const contactSeconds = useRef(0);
+  const reportSequence = useRef(0);
+  const [report, setReport] = useState<ReportedLocation | null>(null);
+  const [awarenessReason, setAwarenessReason] = useState('PATROL SEARCH');
   const [webgl] = useState(hasWebGL);
   const [loading, setLoading] = useState(true);
   const [intro, setIntro] = useState(true);
@@ -47,7 +52,7 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
   const [runId, setRunId] = useState(0);
   const [recognitions, setRecognitions] = useState(0);
   const [policeReports, setPoliceReports] = useState(0);
-  const [awareness, setAwareness] = useState(Math.min(38, 8 + c.wantedLevel * 5));
+  const [awareness, setAwareness] = useState(0);
   const [pursuitActive, setPursuitActive] = useState(false);
   const [pursuitPrompt, setPursuitPrompt] = useState(false);
   const [escapeProgress, setEscapeProgress] = useState(0);
@@ -64,7 +69,7 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
   const theme = getDistrictTheme(c.district);
   const posterActive = elapsed >= 3;
   const billboardActive = elapsed >= 25 || localBuzz >= 90;
-  const objectiveComplete = elapsed >= 36 && billboardActive && recognitions > 0;
+  const objectiveComplete = elapsed >= 36 && billboardActive && recognitions > 0 && !pursuitActive && awareness < 55;
   const objective = pursuitActive ? 'BREAK LINE OF SIGHT — EVADE VMPD' : !posterActive ? 'FIND YOUR POSTER' : recognitions < 1 ? 'LET THE DISTRICT RECOGNIZE YOU' : awareness < 72 ? 'AVOID POLICE ATTENTION' : billboardActive ? 'WATCH THE CITY REACT' : 'STAY MOBILE';
   const objectiveProgress = pursuitActive ? escapeProgress * 20 : Math.min(100, Math.round(elapsed / 36 * 100));
   const policeCount = c.wantedLevel >= 4 && elapsed >= 20 ? 2 : elapsed >= 14 ? 1 : 0;
@@ -142,33 +147,48 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
     setNotification({ icon: 'network', title: 'LINE OF SIGHT BROKEN', body: 'VMPD search radius lost // keep moving.' });
   }, [escapeProgress, pursuitActive]);
 
-  const onRecognize = useCallback((id: string, role: string, influencer: boolean) => {
+  const onRecognize = useCallback((id: string, role: string, influencer: boolean, location: Point) => {
     if (pausedRef.current || recognized.current.has(id)) return;
     recognized.current.add(id);
     setRecognitions((value) => value + 1);
     setLocalBuzz((value) => Math.min(100, value + (influencer ? 5 : 3)));
-    if (influencer) {
-      setAwareness((value) => Math.min(100, value + 14));
-      setNotification({ icon: 'social', title: 'PHOTO TAKEN', body: `${role} posted your location // BUZZ +5.` });
-    } else setNotification({ icon: 'poster', title: 'RECOGNIZED', body: `${role} matched you to the city poster.` });
+    setReport({ ...location, sequence: ++reportSequence.current });
+    setPoliceReports(value => value + 1);
+    setAwareness(value => Math.max(value, Math.min(85, Math.max(35, value + (influencer ? 20 : 14)))));
+    setNotification({ icon: 'police', title: 'WITNESS TIP RECEIVED', body: `${role} reported your location. VMPD is investigating.` });
   }, []);
 
-  const onPoliceDetect = useCallback((visible: boolean, caught = false, officer: string) => {
+  const onPoliceDetect = useCallback((detection: PoliceDetection, officer: string) => {
     if (pausedRef.current) return;
-    detections.current.set(officer, { visible, at: performance.now() });
-    if (caught && pursuitActive && performance.now() > graceUntil.current) {
-      controls.current = {}; setCaptured(true); setPursuitPrompt(false);
-      setNotification({ icon: 'alert', title: 'APPREHENDED', body: 'VMPD made contact // district run ended.' });
-    }
-  }, [pursuitActive]);
+    detections.current.set(officer, { ...detection, at: performance.now() });
+  }, []);
   useEffect(() => {
     if (worldPaused || policeCount === 0) return;
+    let lastTick = performance.now();
     const timer = window.setInterval(() => {
-      const seen = Array.from(detections.current.values()).some(d => d.visible && performance.now() - d.at < 700);
-      setAwareness(value => Math.max(0, Math.min(100, value + (seen ? 4 + c.wantedLevel : pursuitActive ? -2.5 : -.5))));
-    }, 300);
+      const now = performance.now();
+      const seconds = Math.min(.25, (now - lastTick) / 1000);
+      lastTick = now;
+      const fresh = Array.from(detections.current.values()).filter(d => now - d.at < 500);
+      const strongest = fresh.filter(d => d.visible).sort((a, b) => b.rate - a.rate)[0];
+      setAwareness(value => advanceAwareness(value, fresh, seconds, pursuitActive));
+      setAwarenessReason(strongest
+        ? strongest.source === 'vehicle' ? 'PATROL CAMERA: LOCATION REPORTED'
+          : strongest.distance <= 2.5 ? 'CLOSE CONTACT: IDENTIFYING YOU'
+          : 'OFFICER HAS VISUAL CONTACT'
+        : pursuitActive ? 'SIGHT LOST: SEARCHING LAST LOCATION' : 'NO VISUAL CONTACT');
+      graceRemaining.current = Math.max(0, graceRemaining.current - seconds);
+      const contact = pursuitActive && graceRemaining.current === 0 && fresh.some(d => d.contact);
+      contactSeconds.current = contact ? contactSeconds.current + seconds : 0;
+      if (contactSeconds.current >= .65) {
+        controls.current = {};
+        setCaptured(true);
+        setPursuitPrompt(false);
+        setNotification({ icon: 'alert', title: 'APPREHENDED', body: 'VMPD reached and detained you.' });
+      }
+    }, 100);
     return () => clearInterval(timer);
-  }, [worldPaused, policeCount, c.wantedLevel, pursuitActive]);
+  }, [worldPaused, policeCount, pursuitActive]);
 
   const onPosition = useCallback((x: number, z: number, heading: number) => setPlayerMap({ x, z, heading }), []);
   const onMotion = useCallback((value: MotionTelemetry) => setMotionState(value), []);
@@ -200,11 +220,13 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
     pursuitTriggered.current = false;
     recognized.current.clear();
     detections.current.clear();
+    graceRemaining.current = 0; contactSeconds.current = 0;
+    setReport(null); setAwarenessReason('PATROL SEARCH');
     setEscaped(false);
     controls.current = {};
     cameraYaw.current = theme.startYaw;
     setRunId((value) => value + 1);
-    setElapsed(0); setRecognitions(0); setPoliceReports(0); setAwareness(Math.min(38, 8 + c.wantedLevel * 5)); setPursuitActive(false); setPursuitPrompt(false); setEscapeProgress(0); setCaptured(false); setLocalBuzz(cityState?.buzz || 50); setMotionState({ speed: 0, stamina: 100, grounded: true, sprinting: false }); setSummary(false); setPaused(false); setPosterOpen(false); setNearPoster(false); setIntro(true);
+    setElapsed(0); setRecognitions(0); setPoliceReports(0); setAwareness(0); setPursuitActive(false); setPursuitPrompt(false); setEscapeProgress(0); setCaptured(false); setLocalBuzz(cityState?.buzz || 50); setMotionState({ speed: 0, stamina: 100, grounded: true, sprinting: false }); setSummary(false); setPaused(false); setPosterOpen(false); setNearPoster(false); setIntro(true);
     window.setTimeout(() => setIntro(false), 2300);
   };
 
@@ -221,11 +243,11 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
 
   return <main className="district-game"><div className="game-viewport-3d" style={{ '--district-accent': theme.accent } as React.CSSProperties} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp}>
     <div className="game-scene-layer">
-    <Canvas shadows dpr={[1, 1.5]} frameloop={paused || summary || posterOpen || pursuitPrompt || captured ? 'demand' : 'always'} camera={{ fov: 58, near: .1, far: 450, position: [.5, 3.2, 45] }} gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }} onCreated={({ gl }) => { gl.toneMapping = THREE.ACESFilmicToneMapping; gl.toneMappingExposure = 1.25; gl.outputColorSpace = THREE.SRGBColorSpace; }}><color attach="background" args={[theme.fog]} /><Suspense fallback={null}><NeonHarborScene onReady={sceneReady} key={runId} district={c.district} posterUrl={posterUrl} alias={c.alias} lifestyle={c.lifestyle} controls={controls} cameraYaw={cameraYaw} cameraPitch={cameraPitch} signals={{ elapsed, posterActive, billboardActive, paused: worldPaused, awareness, pursuitActive, wantedLevel: c.wantedLevel }} onNearPoster={setNearPoster} onPosition={onPosition} onMotion={onMotion} onRecognize={onRecognize} onPoliceDetect={onPoliceDetect} /></Suspense></Canvas>
+    <Canvas shadows dpr={[1, 1.5]} frameloop={paused || summary || posterOpen || pursuitPrompt || captured ? 'demand' : 'always'} camera={{ fov: 58, near: .1, far: 450, position: [.5, 3.2, 45] }} gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }} onCreated={({ gl }) => { gl.toneMapping = THREE.ACESFilmicToneMapping; gl.toneMappingExposure = 1.25; gl.outputColorSpace = THREE.SRGBColorSpace; }}><color attach="background" args={[theme.fog]} /><Suspense fallback={null}><NeonHarborScene onReady={sceneReady} key={runId} district={c.district} posterUrl={posterUrl} alias={c.alias} lifestyle={c.lifestyle} controls={controls} cameraYaw={cameraYaw} cameraPitch={cameraPitch} signals={{ elapsed, posterActive, billboardActive, paused: worldPaused, awareness, pursuitActive, report, wantedLevel: c.wantedLevel }} onNearPoster={setNearPoster} onPosition={onPosition} onMotion={onMotion} onRecognize={onRecognize} onPoliceDetect={onPoliceDetect} /></Suspense></Canvas>
     </div>
     <div className="game-hud identity-hud"><img src={c.editedImage || c.originalImage} alt="Character identity" /><span><small>{c.district.toUpperCase()} // LIVE</small><b>{c.name} “{c.alias}”</b><em>{c.lifestyle.replace('-', ' ')}</em></span></div>
     <div className="game-hud stats-hud"><span>WANTED <b>{'★'.repeat(c.wantedLevel)}{'☆'.repeat(5 - c.wantedLevel)}</b></span><span>HEAT <b>{Math.min(100, c.heat + (policeReports ? 12 : 0))}</b></span><span>REP <b>{Math.min(100, c.reputation + recognitions * 2)}</b></span><span>BUZZ <b>{localBuzz}</b></span></div>
-    <div className={`awareness-hud ${awareness >= 72 ? 'danger' : ''}`}><span>POLICE AWARENESS <b>{Math.round(awareness)}%</b></span><i><b style={{ width: `${awareness}%` }} /></i></div>
+    <div className={`awareness-hud ${awareness >= 72 ? 'danger' : ''}`}><span>POLICE AWARENESS <b>{Math.round(awareness)}%</b></span><i><b style={{ width: `${awareness}%` }} /></i><small className="awareness-reason" role="status">{awarenessReason}</small></div>
     <div className={`motion-hud ${motionState.sprinting ? 'sprinting' : ''}`}><span><small>VELOCITY</small><b>{Math.round(motionState.speed * 3.6)} <em>KM/H</em></b></span><span><small>{motionState.grounded ? 'TRACTION' : 'AIRBORNE'}</small><i><b style={{ width: `${motionState.stamina}%` }} /></i><em>STAMINA {Math.round(motionState.stamina)}%</em></span></div>
     <div className={`objective-hud ${pursuitActive ? 'pursuit' : ''}`}><small>{pursuitActive ? 'ACTIVE PURSUIT' : 'CURRENT OBJECTIVE'}</small><b>{objective}</b><i className={!pursuitActive && objectiveComplete ? 'complete' : ''}>{pursuitActive ? `${escapeProgress}/5 SECONDS HIDDEN` : objectiveComplete ? 'OBJECTIVE COMPLETE' : `${objectiveProgress}%`}</i></div>
     <motion.div key={`${notification.title}-${notification.body}`} className="game-notification" initial={{ x: 280, opacity: 0 }} animate={{ x: 0, opacity: 1 }}><NotificationIcon /><span><b>{notification.title}</b>{notification.body}</span></motion.div>
@@ -238,7 +260,7 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
     {loading && <div className="game-loading"><div className="loading-mark"><span /><span /><span /></div><p>SYNCING CITY ASSETS</p><h2>LOADING {c.district.toUpperCase()}</h2><b>POSTER NETWORK CONNECTED</b><i /></div>}
     {!loading && intro && <motion.div className="district-intro" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><span>VICE COAST // DISTRICT {theme.code}</span><h1>{c.district.toUpperCase()}</h1><p>23:54</p><b>{theme.tagline}</b></motion.div>}
     {!loading && !intro && tutorial && <div className="game-tutorial" role="dialog" aria-label="District controls"><button className="tutorial-close" aria-label="Close district controls" onClick={() => { setTutorial(false); setPaused(false); }}><X /></button><p>ENTERING {c.district.toUpperCase()}</p><div><span><kbd>WASD</kbd><b>MOVE</b></span><span><kbd>DRAG</kbd><b>CAMERA</b></span><span><kbd>SHIFT</kbd><b>SPRINT</b></span><span><kbd>SPACE</kbd><b>JUMP</b></span><span><kbd>E</kbd><b>INTERACT</b></span></div><small>Your poster is live in the city. Explore to see how people react.</small><button className="primary coral-btn tutorial-start" onClick={() => { setTutorial(false); setPaused(false); }}>START EXPLORING <ArrowRight /></button></div>}
-    {pursuitPrompt && !captured && <motion.div className="pursuit-alert" role="dialog" aria-modal="true" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><ShieldAlert /><p>YOU HAVE BEEN IDENTIFIED</p><h2>VMPD PURSUIT ACTIVE</h2><span>Police units are moving toward your live position. Break line of sight, reduce awareness below 55%, and stay hidden for five seconds.</span><div><button className="primary coral-btn" autoFocus onClick={() => { graceUntil.current = performance.now() + 3000; setPursuitPrompt(false); }}><Gauge /> RUN — LOSE THE COPS</button><button className="secondary" onClick={() => { setPursuitPrompt(false); setCaptured(true); }}>SURRENDER</button></div></motion.div>}
+    {pursuitPrompt && !captured && <motion.div className="pursuit-alert" role="dialog" aria-modal="true" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><ShieldAlert /><p>YOU HAVE BEEN IDENTIFIED</p><h2>VMPD PURSUIT ACTIVE</h2><span>Police have confirmed your identity and are closing in. Break line of sight, reduce awareness below 55%, and stay hidden for five seconds.</span><div><button className="primary coral-btn" autoFocus onClick={() => { graceRemaining.current = 1.5; contactSeconds.current = 0; setPursuitPrompt(false); }}><Gauge /> RUN — LOSE THE COPS</button><button className="secondary" onClick={() => { setPursuitPrompt(false); setCaptured(true); }}>SURRENDER</button></div></motion.div>}
     {captured && !summary && <div className="arrest-menu" role="dialog" aria-modal="true"><ShieldAlert /><p>VMPD CONTACT</p><h2>APPREHENDED</h2><span>Police confirmed your identity. Accept the arrest to add it to your city record, or retry this district.</span><button className="primary coral-btn" onClick={finish}>ACCEPT ARREST — VIEW IMPACT</button><button className="secondary" onClick={resetGame}><RotateCcw /> RETRY DISTRICT</button></div>}
     {posterOpen && <div className="poster-inspection"><button onClick={() => setPosterOpen(false)}><X /> CLOSE</button><div><img src={posterUrl} alt="Your customized wanted poster" /><aside><p>PHYSICAL CITY ASSET</p><b>POSTER NETWORK // {theme.code}</b><span>This is the exact image published from React Image Editor. NPC recognition probability is now active nearby.</span><small><MapPin /> {c.district.toUpperCase()}</small></aside></div></div>}
     {paused && !summary && !posterOpen && <div className="pause-menu"><p>DISTRICT PAUSED</p><button className="primary" onClick={() => setPaused(false)}><Play /> RESUME</button><button className="secondary" onClick={finish}>EXIT DISTRICT</button><button className="text-btn" onClick={resetGame}><RotateCcw /> RESTART DISTRICT</button></div>}
