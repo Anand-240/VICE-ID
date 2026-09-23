@@ -507,10 +507,37 @@ function PoliceOfficer({ position, playerPosition, active, awareness, onDetect, 
 
 function Billboard({ posterUrl, active, ad, accent }: { posterUrl: string; active: boolean; ad: string; accent: string }) {
   const texture = useTexture(posterUrl);
-  const material = useRef<THREE.MeshStandardMaterial>(null);
+  const adTexture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1200; canvas.height = 680;
+    const context = canvas.getContext('2d');
+    if (context) {
+      context.fillStyle = '#101823'; context.fillRect(0, 0, 1200, 680);
+      context.strokeStyle = accent; context.lineWidth = 6; context.strokeRect(28, 28, 1144, 624);
+      context.textAlign = 'center'; context.fillStyle = accent;
+      context.font = '24px monospace'; context.fillText('VICE COAST PRESENTS', 600, 210);
+      context.fillStyle = '#f4e7d3'; context.font = 'bold 60px sans-serif';
+      context.fillText(ad, 600, 355, 1080);
+      context.fillStyle = accent; context.font = '20px monospace';
+      context.fillText('CITY POSTER NETWORK // CONNECTING', 600, 490);
+    }
+    const result = new THREE.CanvasTexture(canvas);
+    result.colorSpace = THREE.SRGBColorSpace;
+    return result;
+  }, [ad, accent]);
+  useEffect(() => () => adTexture.dispose(), [adTexture]);
   useEffect(() => { texture.colorSpace = THREE.SRGBColorSpace; texture.needsUpdate = true; }, [texture]);
-  useFrame(({ clock }) => { if (material.current && active) material.current.emissiveIntensity = 1.1 + Math.max(0, Math.sin(clock.elapsedTime * 18)) * .45; });
-  return <group position={[0, 0, -65]}><mesh castShadow position={[0, 6.5, 0]}><boxGeometry args={[10.4, 6.2, .45]} /><meshStandardMaterial color="#202630" metalness={.62} roughness={.32} /></mesh><mesh position={[0, 6.5, .24]}><planeGeometry args={[9.7, 5.5]} />{active ? <meshStandardMaterial ref={material} map={texture} emissive={accent} emissiveIntensity={1.2} roughness={.42} /> : <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={.72} roughness={.5} />}</mesh>{!active && <Html transform position={[0, 6.5, .28]} distanceFactor={10}><div className="billboard-ad"><small>VICE COAST PRESENTS</small>{ad}</div></Html>}<mesh castShadow position={[-3.6, 2.8, 0]}><boxGeometry args={[.38, 5.6, .38]} /><meshStandardMaterial color="#2d333c" metalness={.7} /></mesh><mesh castShadow position={[3.6, 2.8, 0]}><boxGeometry args={[.38, 5.6, .38]} /><meshStandardMaterial color="#2d333c" metalness={.7} /></mesh></group>;
+  const image = texture.image as { width: number; height: number };
+  const aspect = image.width / Math.max(1, image.height);
+  const width = active ? Math.min(9.7, 5.5 * aspect) : 9.7;
+  const height = active ? Math.min(5.5, 9.7 / aspect) : 5.5;
+  return <group position={[0, 0, -65]}>
+    <mesh castShadow position={[0, 6.5, 0]}><boxGeometry args={[10.4, 6.2, .45]} /><meshStandardMaterial color="#202630" metalness={.62} roughness={.32} /></mesh>
+    <mesh position={[0, 6.5, .25]}><planeGeometry args={[9.7, 5.5]} /><meshBasicMaterial color="#0b1019" toneMapped={false} /></mesh>
+    <mesh position={[0, 6.5, .28]}><planeGeometry args={[width, height]} /><meshBasicMaterial key={active ? 'published-poster' : 'district-ad'} map={active ? texture : adTexture} color="white" toneMapped={false} /></mesh>
+    <mesh castShadow position={[-3.6, 2.8, 0]}><boxGeometry args={[.38, 5.6, .38]} /><meshStandardMaterial color="#2d333c" metalness={.7} /></mesh>
+    <mesh castShadow position={[3.6, 2.8, 0]}><boxGeometry args={[.38, 5.6, .38]} /><meshStandardMaterial color="#2d333c" metalness={.7} /></mesh>
+  </group>;
 }
 
 function World({ posterUrl, district, alias, signals, playerPosition, onRecognize, onPoliceDetect }: Pick<SceneProps, 'posterUrl' | 'district' | 'alias' | 'signals' | 'onRecognize' | 'onPoliceDetect'> & { playerPosition: MutableRefObject<THREE.Vector3> }) {
