@@ -17,6 +17,10 @@
 @media(max-width:900px){.motion-hud{right:10px;bottom:184px}.mobile-game-controls>div:last-child{gap:6px}.mobile-jump,.mobile-run,.mobile-interact{width:56px;height:56px}}
 @media(max-width:620px){.motion-hud{right:10px;bottom:244px;width:176px}.motion-hud>span:first-child>b{font-size:14px}}
 
+/* Contain Drei Html blending's canvas z-index below every gameplay overlay. */
+.game-scene-layer{position:absolute;inset:0;z-index:0;isolation:isolate;overflow:hidden}
+.game-tutorial>.tutorial-start{position:static;width:100%;margin-top:20px;background:var(--coral,#ff7867);color:#0a0d16;min-height:48px}
+.game-tutorial>.tutorial-close{min-width:36px;min-height:36px;cursor:pointer}
 /* Readable instrument panels with a consistent visual hierarchy. */
 .game-hud,.motion-hud,.awareness-hud{border-radius:4px;background:linear-gradient(135deg,rgba(9,16,27,.94),rgba(17,27,42,.88));border-color:rgba(183,204,224,.28)}
 .identity-hud{padding:10px;gap:12px}.identity-hud img{width:48px;height:52px;border-radius:2px}.identity-hud small,.identity-hud em{font-size:9px;color:#a0b2c5;letter-spacing:.06em}.identity-hud b{font-size:13px}
