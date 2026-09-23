@@ -10,6 +10,14 @@ Built for the **Build with React Image Editor Challenge**.
 
 [Launch VICE ID](https://viceid.vercel.app) · [Source code](https://github.com/Anand-240/VICE-ID) · [React Image Editor](https://github.com/unlayer/react-image-editor)
 
+## Demo Video
+
+Watch the complete journey from character creation and React Image Editor customisation to wanted poster publishing, city reactions, playable districts, and police pursuit gameplay.
+
+[![Watch the VICE ID project demo](https://img.youtube.com/vi/e4qh5EbIwJo/hqdefault.jpg)](https://youtu.be/e4qh5EbIwJo)
+
+[Watch the full VICE ID demo on YouTube](https://youtu.be/e4qh5EbIwJo)
+
 ## The idea
 
 Most image-editing experiences end with a download. VICE ID asks: **what happens after the image is published?**
