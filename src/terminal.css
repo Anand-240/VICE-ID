@@ -1,0 +1,17 @@
+.terminal-sequence{width:min(560px,calc(100vw - 40px));padding:0;border:1px solid #3c5065;border-top:2px solid var(--cyan);border-radius:5px;background:linear-gradient(145deg,#172333,#0c131e);box-shadow:0 24px 100px #0008;text-align:left;color:#e3eaf1}
+.terminal-sequence>header{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid #304154;font:10px var(--mono);letter-spacing:.08em}
+.terminal-sequence>header>span:last-child{margin-left:auto;color:#9aafc5;font-size:9px}
+.terminal-light{width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px #56d7e866}
+.terminal-sequence>.terminal-context{margin:0;padding:18px 20px 0;font:10px/1.6 var(--mono);letter-spacing:.07em;color:var(--coral);overflow-wrap:anywhere}
+.terminal-output{padding:18px 20px 24px;min-height:132px}
+.terminal-output>div{display:grid;grid-template-columns:26px minmax(0,1fr) 14px;gap:8px;align-items:start;min-height:34px}
+.terminal-output>div>span{font:10px/1.8 var(--mono);color:#728ca5}
+.terminal-output>div>p{margin:0;font:12px/1.8 var(--mono);letter-spacing:.025em;color:#b7c9da;overflow-wrap:anywhere}
+.terminal-output>div.complete>p{color:#e3eaf1}
+.terminal-output>div>b{color:#81c995;font-size:12px}
+.terminal-output p i{display:inline-block;width:7px;height:13px;margin-left:4px;background:var(--cyan);vertical-align:middle}
+.terminal-sequence>footer{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid #304154;padding:12px 20px;font:9px var(--mono);color:#99afc6}
+.terminal-sequence>footer button{background:transparent;color:var(--cyan);border:1px solid #415b70;border-radius:3px;padding:8px;font:9px var(--mono);cursor:pointer;min-height:36px}
+.terminal-sequence>footer button:disabled{opacity:.35;cursor:default}
+.terminal-announcement{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+@media(max-width:480px){.terminal-sequence>header{flex-wrap:wrap;padding:14px}.terminal-sequence>header>span:last-child{width:100%;margin-left:16px}.terminal-output{padding:18px 14px}.terminal-output>div>p{font-size:11px}.terminal-sequence>footer{padding:12px 14px;font-size:8px}}

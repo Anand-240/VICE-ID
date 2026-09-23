@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { ArrowRight, Camera, Download, Eye, FastForward, Heart, Home, ImageUp, MapPin, MoreHorizontal, Newspaper, Radio, RotateCcw, ScanLine, Share2, ShieldAlert, SlidersHorizontal, Smartphone, UserRound, X } from 'lucide-react';
 import hero from './assets/generated/vice-coast.jpg';
-import portraitTexture from './assets/generated/alex-rivera.jpg';
 import { ViceImageEditor, type ViceEditorHandle } from './components/editor/ViceImageEditor';
 import { useCharacterStore } from './store/characterStore';
 import { bountyFor, caseId, generateHeadline, scoreCharacter } from './lib/scoring';
@@ -10,6 +9,8 @@ import { downloadDataUrl, makeFinalCard, makeWantedPoster } from './lib/image';
 import { storageUnavailable } from './lib/storage';
 import { SceneErrorBoundary } from './components/SceneErrorBoundary';
 import { DistrictArtwork } from './components/DistrictArtwork';
+import { TerminalSequence } from './components/TerminalSequence';
+import { LifestyleArtwork, lifestyleColors } from './components/LifestyleArtwork';
 import { buzzLabel, heatLabel } from './lib/city';
 import type { Character, CityEventType, DistrictOutcome, Lifestyle, Stage, WantedLevel } from './types/character';
 
@@ -67,7 +68,7 @@ function Creator({ next }: { next: () => void }) {
     <div className="creator-grid"><section className="creator-visual"><div className="preview-frame" style={{ '--district-glow': districtGlow[c.district] } as React.CSSProperties}>{c.originalImage ? <motion.img key={c.district} initial={{ opacity: .72, scale: 1.015 }} animate={{ opacity: 1, scale: 1 }} src={c.originalImage} alt={`${c.name || 'Character'} portrait`} /> : <div className="silhouette"><Camera /><b>SUBJECT NOT YET IDENTIFIED</b><span>NO SUBJECT IMAGE FOUND</span></div>}<div className="district-atmosphere" /><div className="preview-hud"><span>CURRENT DISTRICT<strong>{c.district}</strong></span><span>IDENTITY<strong>{c.alias || 'NO ALIAS'}</strong></span></div><div className="live-profile"><span>HEAT <b>{liveScores.heat}</b></span><span>REP <b>{liveScores.reputation}</b></span><span>STYLE <b>{liveScores.style}</b></span><strong>{liveStatus}</strong></div><div className="upload-row single"><input ref={fileRef} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => { handleFile(e.target.files?.[0]); e.currentTarget.value = ''; }} /><span>CAPTURE IDENTITY <small>JPG / PNG / WEBP · MAX 15 MB</small></span><button type="button" className="secondary" onClick={() => fileRef.current?.click()}><ImageUp /> {c.originalImage ? 'REPLACE PHOTO' : 'UPLOAD PHOTO'}</button>{uploadError && <p className="form-error" role="alert">{uploadError}</p>}</div></div></section>
     <section className="creator-form"><p className="eyebrow">IDENTITY REGISTRATION / 01</p><h2>WHO ARE YOU<br />IN THIS <em>CITY?</em></h2><p className="creator-sub">The name. The place. The reputation.</p><div className="field-row"><label>NAME<input maxLength={40} value={c.name} placeholder="ALEX RIVERA" onChange={(e) => updateCharacter({ name: e.target.value })} /></label><label>ALIAS<input maxLength={24} value={c.alias} placeholder="NEON" onChange={(e) => updateCharacter({ alias: e.target.value })} /></label><label className="crew-field">CREW <small>OPTIONAL</small><input maxLength={40} value={c.crew || ''} placeholder="COASTLINE RUNNERS" onChange={(e) => updateCharacter({ crew: e.target.value })} /></label></div>
     <label className="section-label">SELECT YOUR DISTRICT</label><div className="district-list">{districts.map(([name, copy, code]) => <button key={name} aria-pressed={c.district === name} className={c.district === name ? 'selected' : ''} style={{ '--card-accent': districtGlow[name] } as React.CSSProperties} onClick={() => updateCharacter({ district: name })}><i><DistrictArtwork district={name} /></i><b>{code}</b><span><strong>{name}</strong><small>{copy}</small></span>{c.district === name && <MapPin aria-label="Selected district" />}</button>)}</div>
-    <label className="section-label lifestyle-heading">WHAT DOES THE CITY KNOW YOU FOR?</label><div className="lifestyle-list">{lifestyles.map(([id, name, copy, stats], i) => <button key={id} aria-pressed={c.lifestyle === id} className={c.lifestyle === id ? 'selected' : ''} onClick={() => updateCharacter({ lifestyle: id })} style={{ backgroundImage: `linear-gradient(0deg,rgba(7,9,16,.98),rgba(7,9,16,.12)),url(${i % 2 ? hero : portraitTexture})` }}><span>0{i + 1}</span><strong>{name}</strong><small>{copy}</small><em>{c.lifestyle === id ? stats : 'SELECT PROFILE'}</em></button>)}</div>
+    <label className="section-label lifestyle-heading">WHAT DOES THE CITY KNOW YOU FOR?</label><div className="lifestyle-list illustrated-profiles">{lifestyles.map(([id, name, copy, stats], i) => <button key={id} aria-pressed={c.lifestyle === id} className={c.lifestyle === id ? 'selected' : ''} onClick={() => updateCharacter({ lifestyle: id })} style={{ '--profile-accent': lifestyleColors[id] } as React.CSSProperties}><div className="profile-art"><LifestyleArtwork lifestyle={id} /><b>0{i + 1}</b></div><div className="profile-copy"><strong>{name}</strong><small>{copy}</small><em>{c.lifestyle === id ? stats : 'SELECT PROFILE'}</em></div></button>)}</div>
     <div className="wanted-select"><div><label className="section-label">HOW HOT ARE YOU?</label><Stars value={c.wantedLevel} onChange={(wantedLevel) => updateCharacter({ wantedLevel })} /></div><p><b>{wantedCopy[c.wantedLevel - 1]}</b><span>City response updates in real time.</span></p></div>
     <button className="primary full" disabled={!valid || captured} onClick={build}>BUILD MY LOOK <ArrowRight /></button></section></div>
   </Screen>;
@@ -84,7 +85,10 @@ function Studio({ next }: { next: () => void }) {
   </Screen>;
 }
 
-function ProcessOverlay({ lines }: { lines: string[] }) { return <motion.div className="process-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><ScanLine /><div>{lines.map((line, i) => <motion.p key={line} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * .28 }}>{line}</motion.p>)}</div></motion.div>; }
+function ProcessOverlay({ lines }: { lines: string[] }) {
+  const character = useCharacterStore(state => state.character);
+  return <motion.div className="process-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><TerminalSequence label="IDENTITY TRANSMISSION" context={`${character.alias || 'NEW IDENTITY'} / ${character.district.toUpperCase()}`} lines={lines} /></motion.div>;
+}
 
 function Dossier({ next }: { next: () => void }) {
   const { character: c, updateCharacter, cityState, posterPublished, districtOutcome, setStage } = useCharacterStore(); const scores = useMemo(() => scoreCharacter(c), [c.district, c.lifestyle, c.wantedLevel]);
