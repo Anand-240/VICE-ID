@@ -4,15 +4,21 @@
 
 **VICE ID turns image editing into the starting point of a playable identity-and-reputation story.** Create a fictional character, customise their portrait with [Unlayer React Image Editor](https://github.com/unlayer/react-image-editor), turn that portrait into a wanted poster, and publish it across Vice Coast. Explore the city, see simulated public and police reactions, and leave with a downloadable identity card.
 
-Built for the **Build with React Image Editor Challenge**.
+Built for Unlayer's [Build with React Image Editor Challenge](https://www.linkedin.com/posts/builtwithimageeditor-ugcPost-7501266289240240128-5qRa/), with an original GTA VI-inspired idea: let players design the identity that appears in the city's wanted notices and then experience the response.
 
 **#BuiltWithImageEditor**
 
 [Launch VICE ID](https://viceid.vercel.app) · [Source code](https://github.com/Anand-240/VICE-ID) · [React Image Editor](https://github.com/unlayer/react-image-editor)
 
+Unlayer React Image Editor is used first to edit the uploaded portrait in **VICE Studio**, then optionally to customise the complete wanted poster in **Wanted Poster Studio**. The saved portrait appears in the dossier and final identity card. The saved poster appears in the city preview, VICEFEED and 3D street displays. These are the player's exported images carried through the experience.
+
+Inside the playable district, **Street Signal Studio** opens the same editor on a wall surface. Publish your drawing or message onto the wall, then move before the ten-second police response delay ends.
+
+[Editor integration](#react-image-editor-is-the-core-creative-tool) · [Try the full journey](#try-the-full-editor-to-world-loop) · [Run locally](#run-locally)
+
 ## Demo Video
 
-Watch the complete journey from character creation and React Image Editor customisation to wanted poster publishing, city reactions, playable districts, and police pursuit gameplay.
+Watch the project demo, covering character creation, the Unlayer React Image Editor workspace, wanted poster publishing, city reactions and police pursuit gameplay.
 
 [![Watch the VICE ID project demo](https://img.youtube.com/vi/e4qh5EbIwJo/hqdefault.jpg)](https://youtu.be/e4qh5EbIwJo)
 
@@ -20,7 +26,7 @@ Watch the complete journey from character creation and React Image Editor custom
 
 ## Product Walkthrough
 
-The screenshots below follow the complete journey from identity creation to a live police pursuit. Select any image to open the larger version.
+The screenshots below show the identity, editing and pursuit journey. They were captured before the street wall editing and character movement update. Select any image to open the larger version.
 
 <p align="center">
   <a href="docs/screenshots/01-landing.webp">
@@ -75,7 +81,7 @@ The screenshots below follow the complete journey from identity creation to a li
 
 #### The poster becomes part of the world
 
-Publishing does more than move to the next screen. VICE ID takes the exact poster exported from the second React Image Editor session and places it inside the selected 3D district. It remains the player's design, including their portrait, alias, wanted level, custom text, stickers, marks, filters and frame choices.
+VICE ID places the published wanted poster inside the selected 3D district. The initial layout combines the edited portrait with the character's alias, wanted level, district, profile and reward. Opening **Customize Poster** lets the player edit that whole composition with Unlayer React Image Editor. Any saved text, stickers, drawing, filters or frames become part of the image displayed in the city. Players can also publish the initial composition without this optional second editing session.
 
 <p align="center">
   <a href="docs/screenshots/08-city-gameplay.webp">
@@ -87,10 +93,10 @@ Publishing does more than move to the next screen. VICE ID takes the exact poste
 | Poster presence | Purpose inside the experience |
 | --- | --- |
 | **Street panels and poster stands** | Make the edited asset discoverable at pedestrian level and give the player something physical to approach and inspect. |
-| **District billboard** | Expands the poster from a local notice into a citywide broadcast when reach or buzz becomes high enough. |
-| **Nearby witnesses** | Pedestrians close to the poster network can recognise the character, stop, react and report the last known location to VMPD. |
-| **Police response** | Witness tips and officer sightings increase awareness, bringing patrols toward the reported location and potentially starting a pursuit. |
-| **Persistent visual identity** | The same saved poster continues into the city story, evidence records, gameplay results and downloadable output. |
+| **District billboard** | Displays the published poster after 25 seconds of active gameplay, or earlier when local buzz reaches 90. |
+| **Nearby witnesses** | Posters create suspicion. Once the player publishes a wall mark, nearby witnesses can report the character's location. |
+| **Police response** | The first wall publication starts a ten-second delay. After that, dispatch investigates the incident and officer sightings increase awareness. Poster recognition alone does not start a pursuit. |
+| **Persistent visual identity** | The same saved poster appears in the city preview, dossier evidence, VICEFEED and poster downloads. The final identity card separately uses the edited portrait and updated story details. |
 
 Recognition is a fictional gameplay simulation based on poster activation, proximity and line of sight. The application does not analyse the uploaded face or perform real facial recognition.
 
@@ -116,7 +122,7 @@ Recognition is a fictional gameplay simulation based on poster activation, proxi
 
 ## The idea
 
-Most image-editing experiences end with a download. VICE ID asks: **what happens after the image is published?**
+VICE ID starts with a question: **what happens after the image is published?**
 
 Here, your edit becomes an asset inside the experience. Your portrait appears in a police dossier; your customised wanted poster appears on city displays; your character choices and gameplay contribute to a fictional reputation. The final VICE ID brings your edited identity and the city's response together.
 
@@ -124,19 +130,20 @@ The visual direction combines a neon coastal city, police-record interfaces, ter
 
 ## React Image Editor is the core creative tool
 
-VICE ID uses the official **`@unlayer/react-image-editor`** package, not a look-alike toolbar. It is embedded in two connected stages:
+VICE ID embeds the official [Unlayer React Image Editor](https://github.com/unlayer/react-image-editor) through **`@unlayer/react-image-editor`** in three connected workspaces:
 
 | Editor session | Starting image | What the player does | Where the result goes |
 | --- | --- | --- | --- |
 | **VICE Studio** | Uploaded portrait | Crop, resize, filter, draw, add text, shapes, stickers or frames | Dossier, wanted-poster composition and final identity card |
-| **Wanted Poster Studio** | Generated wanted poster containing the edited portrait | Customise the complete poster before publishing | Poster preview, city displays, playable districts and poster download |
+| **Wanted Poster Studio** | Generated wanted poster containing the edited portrait | Optionally customise the complete poster before publishing | Poster preview, dossier evidence, VICEFEED, 3D city displays and poster download |
+| **Street Signal Studio** | Brick wall surface, or its existing saved mark | Draw, write or place a visual signal while the game is paused | The selected 3D wall, with a delayed police response after the first publication |
 
 ### How the integration works
 
 The shared [ViceImageEditor component](src/components/editor/ViceImageEditor.tsx) wraps the official editor and connects it to the rest of the application.
 
 - **Native tools:** crop, resize, filters, drawing, text, shapes, stickers and frames are enabled inside the editor.
-- **Real image exports:** the editor's `onSave({ dataUrl })` callback saves the result. External actions such as **Lock Identity**, **Save & Preview** and **Publish to City** also use the editor instance's `getImage()` method to capture the current canvas.
+- **Image exports:** the editor's `onSave({ dataUrl })` callback saves the result. **Lock Identity** and **Save & Preview** use the editor instance's `getImage()` method to capture the current canvas. **Publish to City** exports the canvas when the poster editor is open, or uses the saved poster when in preview mode.
 - **Shared state:** the exported portrait is stored as `editedImage`; the exported poster is stored as `wantedPosterImage`. Subsequent screens consume those images.
 - **Session continuity:** the source image stays fixed while an editing session is mounted, so saving does not reload the canvas and discard that session's editing history.
 - **Recovery:** loading states, error messages, a loading timeout and retry support help recover from editor failures. Export-dependent actions wait until the editor is ready.
@@ -151,8 +158,8 @@ Uploaded portrait
       → Police dossier
       → Final VICE ID composition
       → Wanted-poster composition
-          → React Image Editor: poster customisation
-          → Saved customised poster
+          → Optional React Image Editor: poster customisation
+          → Saved poster
               → City preview and 3D poster surfaces
               → Wanted-poster download
 ```
@@ -187,7 +194,9 @@ Explore **Overview**, **Activity**, **Known Locations** and **Evidence**. The do
 
 Choose **Customize Poster** to open the second React Image Editor session. Add your own text, marks, stickers, filters or other edits, then preview, download or publish the actual result. Resizing in the editor can change the poster's dimensions.
 
-When the player publishes, VICE ID stores that exact editor export as `wantedPosterImage`. The experience does not swap it for a generic prop. Poster stands, street displays, the large district billboard, evidence views and downloads all read from the same saved image, keeping the creative result consistent from editing to gameplay.
+When the player publishes from the editor, VICE ID stores the current canvas export as `wantedPosterImage`. Publishing from preview uses the saved poster. Poster stands, street displays, the large district billboard, evidence views and downloads all read from that image, keeping the creative result consistent from editing to gameplay.
+
+Poster edits change the displayed visual. Drawing different stars or a reward on the poster does not change the character's wanted level or bounty; those values come from character settings and game events.
 
 ### 5. Publish to City Impact
 
@@ -213,7 +222,11 @@ The seven districts have distinct environment configurations, landmarks, palette
 
 Movement uses Rapier physics for gravity and collisions, with acceleration, braking, grounded jumping, limited air control and stamina-based sprinting. The camera follows movement and checks for obstructions.
 
-NPC encounters and police detection produce simulated recognition and awareness events. Patrols accelerate as awareness rises; reaching **100% police awareness** starts an actionable confrontation with pursuit or surrender choices. Escape, capture and other district results feed back into the wider city state.
+Posters create suspicion without starting a pursuit. Approach a service wall marked by a cyan diamond on the minimap and press **E** to open Unlayer React Image Editor. Draw or write on its surface, then choose **Publish on Wall**. The exported image becomes the wall's texture.
+
+The first publication gives you **10 seconds of active game time** before dispatch responds. Nearby witnesses can report you; street surveillance also logs the wall incident. Police investigate the reported location, then use sight and distance to identify and approach you. Reaching **100% police awareness** offers pursuit or surrender. Capture requires physical officer contact; breaking sight gives you a chance to escape. Pausing or opening the editor freezes the countdown. Additional marks do not reset the initial delay.
+
+Characters have articulated arms and legs, pace-dependent animation and a closer shoulder camera. Movement, police contact and routes around solid obstacles use the existing physics and detection systems. Escape and capture results feed back into the city state. Wall artwork stays in the current district run and clears when you restart or leave it.
 
 Select **Start Exploring** after loading to begin. Poster displays activate progressively during active gameplay; billboard publication is not tied to reaching 100% police awareness.
 
@@ -236,9 +249,10 @@ Generate a 1080 × 1350 final identity card containing your edited portrait and 
 5. Choose **Customize Poster** and add something recognisable, such as a text label or sticker.
 6. **Save & Preview**, then **Publish to City**.
 7. Enter a district, select **Start Exploring**, and find your published poster.
-8. Complete or leave the district, continue through VICEFEED, and download your final VICE ID and poster.
+8. Find a cyan wall marker, press **E**, edit the surface and **Publish on Wall**. Move during the ten-second delay and observe the police response.
+9. Complete or leave the district, continue through VICEFEED, and download your final VICE ID and poster.
 
-This path demonstrates both editor sessions and how their outputs remain connected to the rest of the project. No application account or login is required.
+This path demonstrates all three editor workspaces and how their exports connect to the rest of the project. No application account or login is required.
 
 ## Gameplay controls
 
@@ -248,7 +262,7 @@ This path demonstrates both editor sessions and how their outputs remain connect
 | Rotate camera | Drag inside the game |
 | Sprint | Hold Shift; uses stamina |
 | Jump | Space |
-| Interact near a poster | E |
+| Edit a nearby wall or inspect a poster | E (wall interaction takes priority; wall editing is unavailable during active pursuit) |
 | Pause / resume | Escape or the on-screen control |
 
 Touch controls provide movement, run, jump and interaction buttons on supported mobile layouts. The interface also provides district exit and pursuit-result actions.
@@ -259,7 +273,7 @@ Touch controls provide movement, run, jump and interaction buttons on supported 
 | --- | --- |
 | React 18 + TypeScript | Interface, screen flow and typed application state |
 | Vite | Development server and production build |
-| Unlayer React Image Editor | Portrait and wanted-poster editing |
+| Unlayer React Image Editor | Portrait, wanted-poster and in-world wall editing |
 | Zustand | Shared character, publication and gameplay state |
 | IndexedDB | Browser-local persistence, including exported images |
 | Canvas API | Wanted-poster and final-card composition |
@@ -283,6 +297,8 @@ src/
 │   ├── ViceDistrictGame.tsx        Gameplay flow, awareness and outcomes
 │   ├── NeonHarborScene.tsx         Shared district scene, characters and physics
 │   ├── DistrictMinimap.tsx         In-game minimap
+│   ├── police.ts                  Detection, awareness and patrol navigation
+│   ├── walls.ts                   Editable wall locations and response delay
 │   └── districts.ts               Seven district configurations
 ├── lib/
 │   ├── image.ts                   Poster and final-card composition
@@ -294,7 +310,9 @@ src/
 ├── visual-polish.css              Visual refinements and responsive layouts
 └── terminal.css                   Identity console styling
 tests/
-└── city.test.mjs                   Simulation and configuration regression tests
+├── city.test.mjs                   Simulation and configuration regression tests
+├── police.test.mjs                 Detection, contact and navigation tests
+└── walls.test.mjs                  Wall interaction and response gating tests
 ```
 
 Despite its filename, `NeonHarborScene.tsx` renders the shared scene system for all seven district configurations.
@@ -317,9 +335,9 @@ Open the local URL printed by Vite.
 | `npm run dev` | Start the development server |
 | `npm run build` | Run TypeScript checks and build into `dist/` |
 | `npm run preview` | Preview the production build locally |
-| `npm test` | Run the simulation and configuration tests |
+| `npm test` | Run city simulation, configuration and police logic tests |
 
-The automated tests cover city publication, simulated time rollover, district configurations, score bounds and bounty progression. They do not replace browser testing of the external editor, downloads, touch controls or 3D gameplay.
+The automated tests cover city publication, simulated time rollover, district configurations, score bounds, bounty progression, police detection, awareness rates, arrest conditions and navigation around obstacles. Browser testing is still needed for the external editor, downloads, touch controls and rendered 3D gameplay.
 
 ### Deploy to Vercel
 
@@ -345,7 +363,7 @@ After deploying, test the complete upload → edit → poster → publish → ga
 - 3D rendering and physics: Three.js, React Three Fiber, Drei and Rapier
 - Interface icons: [Lucide](https://lucide.dev/)
 - Typography: Anton, Manrope and IBM Plex Mono
-- Visual assets: project-specific generated artwork, original SVG district and lifestyle illustrations, and procedural 3D scenes
+- Visual assets: coastal background artwork, original SVG district and lifestyle illustrations, procedural 3D scenes, and portraits supplied by the user
 
 VICE ID is an independent, GTA-inspired project and is not affiliated with Rockstar Games.
 

@@ -3,7 +3,7 @@ import type { ImageEditorRef } from '@unlayer/react-image-editor';
 
 const ImageEditor = lazy(() => import('@unlayer/react-image-editor'));
 
-export interface ViceEditorHandle { exportImage: () => string | null; resetImage: () => Promise<boolean>; }
+export interface ViceEditorHandle { exportImage: () => string | null; hasChanges: () => boolean; resetImage: () => Promise<boolean>; }
 interface Props { image: string; onSave: (dataUrl: string) => void; onReadyChange?: (ready: boolean) => void; onCancel: () => void; minHeight?: number; }
 
 export const ViceImageEditor = forwardRef<ViceEditorHandle, Props>(function ViceImageEditor({ image, onSave, onCancel, onReadyChange, minHeight = 590 }, ref) {
@@ -19,6 +19,7 @@ export const ViceImageEditor = forwardRef<ViceEditorHandle, Props>(function Vice
     return () => clearTimeout(timer);
   }, [ready, error, retryKey]);
   useImperativeHandle(ref, () => ({
+    hasChanges: () => { try { return editorRef.current?.editor?.hasChanges() ?? false; } catch { return false; } },
     exportImage: () => { try { return editorRef.current?.editor?.getImage() ?? null; } catch { setError('Could not export this canvas. Please retry.'); return null; } },
     resetImage: async () => {
       const instance = editorRef.current?.editor;

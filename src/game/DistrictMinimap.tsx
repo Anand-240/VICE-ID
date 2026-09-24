@@ -1,4 +1,5 @@
 import type { DistrictTheme } from './districts';
+import { WALLS } from './walls';
 
 export function DistrictMinimap({ theme, player, posters, patrol }: { theme: DistrictTheme; player: { x: number; z: number; heading: number }; posters: boolean; patrol: boolean }) {
   const roadWidth = { luxury: 13, harbor: 11, nightlife: 18, marina: 11, barrio: 9, downtown: 15, industrial: 16 }[theme.layout];
@@ -11,6 +12,7 @@ export function DistrictMinimap({ theme, player, posters, patrol }: { theme: Dis
       {theme.layout === 'marina' && <circle cy="-7" r="9.5" fill="none" stroke="#505860" strokeWidth="5" />}
       {theme.layout === 'industrial' && <rect x="-39.5" y="-16" width="45" height="12" transform="rotate(12.6 -17 -10)" fill="#505860" />}
       {posters && [[10.7,-36],[-10.7,-10],[7,17],[13.5,37.4]].map(([x,z]) => <rect key={`${x}-${z}`} x={x-1.4} y={z-1.4} width="2.8" height="2.8" fill="#ffba82" stroke="white" strokeWidth=".5" />)}
+      {WALLS.map(wall => <path key={wall.id} d="M0 -2.5 L2.5 0 L0 2.5 L-2.5 0 Z" transform={`translate(${wall.x} ${wall.z})`} fill="#52d7e8"><title>{wall.name}: editable signal wall</title></path>)}
       <path d="M0 4 L-3 -3 L3 -3 Z" fill="#bdf7ff" transform={`translate(${player.x} ${player.z}) rotate(${-player.heading * 180 / Math.PI})`} />
     </svg>
     <small>{theme.code}{patrol ? ' / PATROL' : ''}</small>

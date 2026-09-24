@@ -40,3 +40,18 @@
 .awareness-reason { display: block; margin-top: 8px; color: #c5d5dd; font: 8px/1.4 'IBM Plex Mono', monospace; letter-spacing: .02em; }
 @media (min-width:901px) and (max-width:1100px) { .game-notification { top:190px; } .pursuit-strip { top:264px; } }
 @media (max-width:620px) { .objective-hud { top:224px; } .game-notification { top:294px; } }
+/* Street editing is a full, scrollable workspace above the paused scene. */
+.wall-editor-overlay{position:absolute;inset:0;z-index:250;background:#0b111c;color:#f4e7d3;overflow:auto;padding:24px clamp(14px,3vw,48px);touch-action:pan-y;cursor:default}
+.wall-editor-overlay>header{display:flex;align-items:center;justify-content:space-between;gap:20px;border-bottom:1px solid #344153;padding-bottom:14px}
+.wall-editor-overlay h2{font-family:Anton,sans-serif;font-size:clamp(28px,4vw,48px);margin:6px 0;line-height:1.2}
+.wall-editor-overlay small,.wall-editor-overlay footer b{font:12px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#52d7e8}
+.wall-editor-overlay>p{max-width:850px;color:#b3bfce;font-size:14px;line-height:1.7;margin:16px 0}
+.wall-editor-overlay .editor-scroll{touch-action:pan-x pan-y;min-height:520px}
+.wall-editor-overlay>footer{display:flex;gap:24px;justify-content:space-between;align-items:center;padding:20px 0;background:#0b111c}
+.wall-editor-overlay footer>div{max-width:650px;display:grid;gap:8px}
+.wall-editor-overlay footer span{color:#aab9ca;font-size:13px;line-height:1.6}
+.wall-editor-overlay footer p{color:#ffb28e;margin:0;font-size:13px}
+.wall-editor-overlay footer button{min-width:220px}
+.wall-world-label{white-space:nowrap;background:#0c1521e8;color:#6de5ed;border:1px solid #6de5ed66;padding:7px 11px;font:10px 'IBM Plex Mono',monospace;letter-spacing:.08em;pointer-events:none}
+.wall-interaction{border-color:#52d7e8;max-width:calc(100% - 32px)}
+@media(max-width:650px){.wall-editor-overlay{padding:14px}.wall-editor-overlay>footer{align-items:stretch;flex-direction:column}.wall-editor-overlay header .secondary{min-width:90px;padding:10px}.wall-editor-overlay>p{font-size:12px}.wall-interaction{bottom:165px}.wall-interaction span{font-size:9px}}

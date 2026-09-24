@@ -5,6 +5,7 @@ import { createContext, useContext, memo, useEffect, useMemo, useRef, useState, 
 import * as THREE from 'three';
 import { getDistrictTheme, type DistrictTheme } from './districts';
 import { findPolicePath, officerDetection, policeSpeed, type PoliceDetection, type ReportedLocation, type Point } from './police';
+import { WALLS, makeWallCanvas, type WallId } from './walls';
 
 export type ControlState = Record<string, boolean>;
 
@@ -24,6 +25,9 @@ export interface SceneSignals {
   wantedLevel: number;
   pursuitActive: boolean;
   report: ReportedLocation | null;
+  responseEnabled: boolean;
+  wallMarked: boolean;
+  wallImages: Partial<Record<WallId, string>>;
 }
 
 interface SceneProps {
@@ -65,36 +69,53 @@ const e = new THREE.Euler();
 const BlockersContext = createContext<Map<string, Box2D>>(new Map());
 
 const Humanoid = memo(function Humanoid({ color, skin = '#b9785d', police = false, variant = 0, moving, pace }: { color: string; skin?: string; police?: boolean; variant?: number; moving?: MutableRefObject<boolean>; pace?: MutableRefObject<number> }) {
-  const leftArm = useRef<THREE.Mesh>(null);
-  const rightArm = useRef<THREE.Mesh>(null);
-  const leftLeg = useRef<THREE.Mesh>(null);
-  const rightLeg = useRef<THREE.Mesh>(null);
+  const limbs = useRef<(THREE.Group | null)[]>([]);
+  const knees = useRef<(THREE.Group | null)[]>([]);
+  const torso = useRef<THREE.Group>(null);
   const phase = useRef(variant * .7);
   useFrame((_, delta) => {
     const active = moving?.current ?? false;
-    const running = (pace?.current ?? 0) > 4;
-    if (active) phase.current += Math.min(delta, .05) * (running ? 14 : 9);
-    const swing = active ? Math.sin(phase.current) * (running ? .8 : .5) : 0;
-    if (leftArm.current) leftArm.current.rotation.x = THREE.MathUtils.damp(leftArm.current.rotation.x, swing, 12, delta);
-    if (rightArm.current) rightArm.current.rotation.x = THREE.MathUtils.damp(rightArm.current.rotation.x, -swing, 12, delta);
-    if (leftLeg.current) leftLeg.current.rotation.x = THREE.MathUtils.damp(leftLeg.current.rotation.x, -swing * .7, 12, delta);
-    if (rightLeg.current) rightLeg.current.rotation.x = THREE.MathUtils.damp(rightLeg.current.rotation.x, swing * .7, 12, delta);
+    const speed = pace?.current ?? 1.5;
+    const running = speed > 4;
+    const dt = Math.min(delta, .05);
+    if (active) phase.current += dt * (running ? 11.5 : 6.5);
+    const swing = active ? Math.sin(phase.current) * (running ? .85 : .48) : 0;
+    limbs.current.forEach((limb, i) => {
+      if (limb) limb.rotation.x = THREE.MathUtils.damp(limb.rotation.x, swing * (i % 2 ? -1 : 1) * (i < 2 ? -1 : 1), 14, dt);
+    });
+    knees.current.forEach((knee, i) => {
+      if (knee) knee.rotation.x = THREE.MathUtils.damp(knee.rotation.x, active ? Math.max(0, Math.sin(phase.current + i * Math.PI)) * (running ? 1.1 : .55) : .03, 14, dt);
+    });
+    if (torso.current) torso.current.rotation.x = THREE.MathUtils.damp(torso.current.rotation.x, active && running ? .12 : 0, 9, dt);
   });
+  const trousers = police ? '#182639' : variant % 2 ? '#655c52' : '#242a34';
   return <group>
-    <mesh castShadow position={[0, 1.58, 0]}><sphereGeometry args={[.19, 18, 14]} /><meshStandardMaterial color={police ? '#c99478' : skin} roughness={.72} /></mesh>
-    {variant % 3 === 0 && <mesh castShadow position={[0, 1.72, -.02]} scale={[1, .55, 1]}><sphereGeometry args={[.195, 16, 10]} /><meshStandardMaterial color="#171419" roughness={.9} /></mesh>}
-    {variant % 3 === 1 && <mesh castShadow position={[0, 1.73, -.02]}><cylinderGeometry args={[.2, .16, .12, 14]} /><meshStandardMaterial color="#251a24" roughness={.88} /></mesh>}
-    {variant % 3 === 2 && <mesh castShadow position={[0, 1.76, 0]} rotation={[.08, 0, 0]}><sphereGeometry args={[.205, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshStandardMaterial color="#0f1116" roughness={.92} /></mesh>}
-    <mesh castShadow position={[0, 1.32, 0]}><cylinderGeometry args={[.1, .1, .16, 10]} /><meshStandardMaterial color={police ? '#c99478' : skin} roughness={.72} /></mesh>
-    <mesh castShadow position={[0, 1.03, 0]} scale={[1, 1, .72]}><capsuleGeometry args={[.27, .48, 6, 10]} /><meshStandardMaterial color={color} roughness={.58} metalness={.04} /></mesh>
-    <mesh ref={leftLeg} castShadow position={[-.17, .37, 0]}><capsuleGeometry args={[.09, .53, 5, 9]} /><meshStandardMaterial color={police ? '#14263f' : variant % 2 ? '#e7d4bc' : '#171a22'} roughness={.7} /></mesh>
-    <mesh ref={rightLeg} castShadow position={[.17, .37, 0]}><capsuleGeometry args={[.09, .53, 5, 9]} /><meshStandardMaterial color={police ? '#14263f' : variant % 2 ? '#e7d4bc' : '#171a22'} roughness={.7} /></mesh>
-    <mesh castShadow position={[-.17, .065, .06]}><boxGeometry args={[.22, .13, .39]} /><meshStandardMaterial color="#090b10" roughness={.55} /></mesh>
-    <mesh castShadow position={[.17, .065, .06]}><boxGeometry args={[.22, .13, .39]} /><meshStandardMaterial color="#090b10" roughness={.55} /></mesh>
-    <mesh ref={leftArm} castShadow position={[-.35, 1.04, 0]} rotation={[0, 0, -.09]}><capsuleGeometry args={[.065, .5, 5, 9]} /><meshStandardMaterial color={color} roughness={.62} /></mesh>
-    <mesh ref={rightArm} castShadow position={[.35, 1.04, 0]} rotation={[0, 0, .09]}><capsuleGeometry args={[.065, .5, 5, 9]} /><meshStandardMaterial color={color} roughness={.62} /></mesh>
-    {variant === 1 && <mesh castShadow position={[.37, .9, -.08]} rotation={[0, 0, -.1]}><boxGeometry args={[.1, .22, .04]} /><meshStandardMaterial color="#0b0f16" metalness={.4} roughness={.2} /></mesh>}
-    {police && <><mesh position={[0, 1.12, -.205]}><boxGeometry args={[.39, .12, .055]} /><meshStandardMaterial color="#d6b35b" emissive="#7a4c16" emissiveIntensity={.8} /></mesh><mesh castShadow position={[0, 1.77, 0]}><cylinderGeometry args={[.22, .22, .07, 16]} /><meshStandardMaterial color="#17243b" roughness={.75} /></mesh></>}
+    <group ref={torso} position={[0, .91, 0]}>
+      <mesh castShadow position={[0, .22, 0]}><boxGeometry args={[.48, .49, .27]} /><meshStandardMaterial color={color} roughness={.92} /></mesh>
+      <mesh position={[0, .12, .143]}><boxGeometry args={[.02, .38, .016]} /><meshStandardMaterial color="#26303a" /></mesh>
+      <mesh castShadow position={[0, .5, 0]}><cylinderGeometry args={[.075, .08, .13, 10]} /><meshStandardMaterial color={skin} /></mesh>
+      <mesh castShadow position={[0, .68, .015]} scale={[.87, 1.12, .92]}><sphereGeometry args={[.17, 14, 12]} /><meshStandardMaterial color={skin} roughness={.88} /></mesh>
+      <mesh position={[0, .81, .005]} scale={[1, .48, 1]}><sphereGeometry args={[.166, 12, 10]} /><meshStandardMaterial color="#211c1b" roughness={1} /></mesh>
+      <mesh position={[0, .67, .165]}><boxGeometry args={[.045, .06, .045]} /><meshStandardMaterial color={skin} /></mesh>
+      {[-.061, .061].map(x => <mesh key={x} position={[x, .714, .158]}><boxGeometry args={[.035, .022, .018]} /><meshStandardMaterial color="#1b1e23" /></mesh>)}
+      {[-1, 1].map((side, i) => <group key={side} ref={node => { limbs.current[i] = node; }} position={[side * .29, .39, 0]}>
+        <mesh castShadow position={[0, -.13, 0]}><capsuleGeometry args={[.073, .17, 4, 8]} /><meshStandardMaterial color={color} roughness={.9} /></mesh>
+        <group position={[0, -.28, 0]} rotation={[-.22, 0, 0]}>
+          <mesh castShadow position={[0, -.105, 0]}><capsuleGeometry args={[.059, .14, 4, 8]} /><meshStandardMaterial color={color} roughness={.9} /></mesh>
+          <mesh castShadow position={[0, -.24, 0]}><sphereGeometry args={[.065, 8, 8]} /><meshStandardMaterial color={skin} /></mesh>
+        </group>
+      </group>)}
+      {police && <><mesh position={[0, .25, .16]}><boxGeometry args={[.4, .32, .08]} /><meshStandardMaterial color="#132132" roughness={.95} /></mesh><mesh position={[-.11, .31, .207]}><boxGeometry args={[.065, .07, .015]} /><meshStandardMaterial color="#e3c678" metalness={.7} roughness={.35} /></mesh><mesh position={[0, .84, .03]}><cylinderGeometry args={[.19, .19, .07, 12]} /><meshStandardMaterial color="#192738" /></mesh><mesh position={[0, .82, .17]}><boxGeometry args={[.26, .025, .15]} /><meshStandardMaterial color="#192738" /></mesh></>}
+    </group>
+    <mesh castShadow position={[0, .87, 0]}><boxGeometry args={[.4, .17, .26]} /><meshStandardMaterial color={trousers} /></mesh>
+    <mesh position={[0, .92, 0]}><boxGeometry args={[.43, .06, .28]} /><meshStandardMaterial color="#14171b" /></mesh>
+    {[-1, 1].map((side, i) => <group key={side} position={[side * .12, .82, 0]} ref={node => { limbs.current[i + 2] = node; }}>
+      <mesh castShadow position={[0, -.18, 0]}><capsuleGeometry args={[.092, .22, 4, 8]} /><meshStandardMaterial color={trousers} roughness={.95} /></mesh>
+      <group position={[0, -.37, 0]} ref={node => { knees.current[i] = node; }}>
+        <mesh castShadow position={[0, -.16, 0]}><capsuleGeometry args={[.074, .22, 4, 8]} /><meshStandardMaterial color={trousers} roughness={.95} /></mesh>
+        <mesh castShadow position={[0, -.37, .07]}><boxGeometry args={[.18, .14, .32]} /><meshStandardMaterial color="#14171b" roughness={.85} /></mesh>
+      </group>
+    </group>)}
   </group>;
 });
 
@@ -107,6 +128,8 @@ function Player({ controls, cameraYaw, cameraPitch, paused, playerPosition, onNe
   const nearRef = useRef(false);
   const syncClock = useRef(0);
   const movingRef = useRef(false);
+  const playerPace = useRef(0);
+  const initialHeading = useRef(cameraYaw.current + Math.PI);
   const jumpHeld = useRef(false);
   const sprintExhausted = useRef(false);
   const stamina = useRef(100);
@@ -118,6 +141,7 @@ function Player({ controls, cameraYaw, cameraPitch, paused, playerPosition, onNe
   useFrame((_, delta) => {
     const rb = body.current;
     if (!rb) return;
+    if (paused) { movingRef.current = false; return; }
     const pos = rb.translation();
     if (pos.y < -3) { rb.setTranslation({ x: spawn[0], y: .84, z: spawn[1] }, true); rb.setLinvel({ x: 0, y: 0, z: 0 }, true); stamina.current = 100; return; }
     playerPosition.current.set(pos.x, pos.y, pos.z);
@@ -170,14 +194,15 @@ function Player({ controls, cameraYaw, cameraPitch, paused, playerPosition, onNe
     jumpHeld.current = jumpPressed;
     rb.setLinvel({ x: nextX, y: jumpNow ? 5.1 : current.y, z: nextZ }, true);
     const planarSpeed = Math.hypot(nextX, nextZ);
+    playerPace.current = planarSpeed;
     movingRef.current = planarSpeed > .18 && grounded;
 
     const runPullback = sprinting ? 1 : 0;
-    const distance = 6.2 + runPullback;
+    const distance = 4.8 + runPullback;
     const horizontal = Math.cos(cameraPitch.current) * distance;
-    const shoulderX = Math.cos(cameraYaw.current) * .48;
-    const shoulderZ = -Math.sin(cameraYaw.current) * .48;
-    targetCamera.set(pos.x + Math.sin(cameraYaw.current) * horizontal + shoulderX, pos.y + 1.62 + Math.sin(cameraPitch.current) * 3.8, pos.z + Math.cos(cameraYaw.current) * horizontal + shoulderZ);
+    const shoulderX = Math.cos(cameraYaw.current) * .7;
+    const shoulderZ = -Math.sin(cameraYaw.current) * .7;
+    targetCamera.set(pos.x + Math.sin(cameraYaw.current) * horizontal + shoulderX, pos.y + 1.15 + Math.sin(cameraPitch.current) * 3.8, pos.z + Math.cos(cameraYaw.current) * horizontal + shoulderZ);
     if (Array.from(blockers.values()).some((box) => targetCamera.x > box.x - box.w / 2 && targetCamera.x < box.x + box.w / 2 && targetCamera.z > box.z - box.d / 2 && targetCamera.z < box.z + box.d / 2)) {
       targetCamera.lerp(new THREE.Vector3(pos.x, pos.y + 1.8, pos.z), .55);
     }
@@ -210,7 +235,7 @@ function Player({ controls, cameraYaw, cameraPitch, paused, playerPosition, onNe
   return <RigidBody ref={body} position={[spawn[0], .84, spawn[1]]} colliders={false} enabledRotations={[false, false, false]} linearDamping={.35} angularDamping={12} friction={1.2} gravityScale={1.35} canSleep={false} ccd>
     <CapsuleCollider args={[.46, .34]} friction={1.2} restitution={0} />
     <mesh position={[0, -.795, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={2}><circleGeometry args={[.42, 24]} /><meshBasicMaterial color="#05060a" transparent opacity={.48} depthWrite={false} /></mesh>
-    <group ref={model} position={[0, -.8, 0]}><Humanoid color="#d43f72" skin="#a9654b" variant={0} moving={movingRef} /><mesh castShadow position={[0, 1.03, -.22]}><boxGeometry args={[.34, .48, .09]} /><meshStandardMaterial color="#141a28" metalness={.12} roughness={.5} /></mesh><mesh position={[0, 1.05, -.272]}><planeGeometry args={[.17, .22]} /><meshStandardMaterial color="#26c6d9" emissive="#126474" emissiveIntensity={.45} /></mesh></group>
+    <group ref={model} position={[0, -.8, 0]} rotation={[0, initialHeading.current, 0]}><Humanoid color="#354757" skin="#a9654b" variant={0} moving={movingRef} pace={playerPace} /><mesh castShadow position={[0, 1.03, -.22]}><boxGeometry args={[.34, .48, .09]} /><meshStandardMaterial color="#141a28" metalness={.12} roughness={.5} /></mesh><mesh position={[0, 1.05, -.272]}><planeGeometry args={[.17, .22]} /><meshStandardMaterial color="#26c6d9" emissive="#126474" emissiveIntensity={.45} /></mesh></group>
   </RigidBody>;
 }
 
@@ -227,6 +252,26 @@ function PosterStand({ url, position, rotation = 0 }: { url: string; position: [
   return <group position={position} rotation={[0, rotation, 0]}><mesh castShadow position={[0, 1.45, -.08]}><boxGeometry args={[1.72, 2.3, .13]} /><meshStandardMaterial color="#202630" metalness={.45} roughness={.52} /></mesh><mesh castShadow position={[-.62, .55, -.1]}><boxGeometry args={[.1, 1.1, .1]} /><meshStandardMaterial color="#242a32" metalness={.7} /></mesh><mesh castShadow position={[.62, .55, -.1]}><boxGeometry args={[.1, 1.1, .1]} /><meshStandardMaterial color="#242a32" metalness={.7} /></mesh><Poster url={url} position={[0, 1.48, .01]} scale={[1.35, 1.82]} /></group>;
 }
 
+function SideWindows({ w, h, d }: { w: number; h: number; d: number }) {
+  const mesh = useRef<THREE.InstancedMesh>(null);
+  const rows = Math.max(1, Math.floor((h - 2) / 2.6));
+  const columns = Math.max(1, Math.floor(d / 3));
+  useEffect(() => {
+    if (!mesh.current) return;
+    const dummy = new THREE.Object3D(); let i = 0;
+    for (const side of [-1, 1]) for (let row = 0; row < rows; row++) for (let col = 0; col < columns; col++) {
+      dummy.position.set(side * (w / 2 + .018), 2.5 + row * 2.6 - h / 2, -d / 2 + 1.5 + col * 3);
+      dummy.rotation.set(0, side * Math.PI / 2, 0); dummy.updateMatrix();
+      mesh.current.setMatrixAt(i, dummy.matrix);
+      mesh.current.setColorAt(i, new THREE.Color((row * 7 + col * 13) % 5 ? '#263543' : '#dfb87d'));
+      i++;
+    }
+    mesh.current.instanceMatrix.needsUpdate = true;
+    if (mesh.current.instanceColor) mesh.current.instanceColor.needsUpdate = true;
+  }, [w, h, d, rows, columns]);
+  return <instancedMesh ref={mesh} args={[undefined, undefined, rows * columns * 2]}><planeGeometry args={[1.15, 1.5]} /><meshStandardMaterial roughness={.32} metalness={.25} emissive="#887862" emissiveIntensity={.16} /></instancedMesh>;
+}
+
 function Building({ position, size, color, label, neon = '#ff668e' }: { position: [number, number, number]; size: [number, number, number]; color: string; label: string; neon?: string }) {
   const blockers = useContext(BlockersContext);
   useEffect(() => { const key = position.join(','); blockers.set(key, { x: position[0], z: position[2], w: size[0], d: size[2] }); return () => { blockers.delete(key); }; }, [blockers, position[0], position[2], size[0], size[2]]);
@@ -235,6 +280,9 @@ function Building({ position, size, color, label, neon = '#ff668e' }: { position
   return <RigidBody type="fixed" colliders={false} position={position}>
     <CuboidCollider args={[w / 2, h / 2, d / 2]} />
     <mesh castShadow receiveShadow><boxGeometry args={size} /><meshStandardMaterial color={color} roughness={.84} metalness={.08} /></mesh>
+    <SideWindows w={w} h={h} d={d} />
+    <mesh position={[0, -h / 2 + .45, 0]}><boxGeometry args={[w + .12, .9, d + .12]} /><meshStandardMaterial color="#34363d" roughness={.95} /></mesh>
+    <mesh position={[0, h / 2, 0]}><boxGeometry args={[w + .35, .28, d + .35]} /><meshStandardMaterial color="#252b34" roughness={.85} /></mesh>
     {windows.map(([x, y], i) => <mesh key={i} position={[x, y - h / 2, d / 2 + .012]}><planeGeometry args={[1.3, .8]} /><meshStandardMaterial color={i % 4 ? '#20394c' : '#b36f55'} emissive={i % 4 ? '#153c55' : '#e68a55'} emissiveIntensity={i % 4 ? .35 : .7} roughness={.35} /></mesh>)}
     <Html transform position={[0, Math.min(h / 2 - 1.2, 3.3), d / 2 + .08]} distanceFactor={13} occlude="blending"><div className="world-sign" style={{ color: neon, borderColor: neon }}>{label}</div></Html>
   </RigidBody>;
@@ -421,7 +469,7 @@ function usePoliceGeometry() {
   return { rayClear, walkClear, world, rapier };
 }
 
-function Civilian({ data, playerPosition, posterActive, onRecognize, paused, alias }: { paused: boolean; alias: string; data: typeof NPCS[number]; playerPosition: MutableRefObject<THREE.Vector3>; posterActive: boolean; onRecognize: SceneProps['onRecognize'] }) {
+function Civilian({ data, playerPosition, posterActive, onRecognize, paused, alias, wallMarked }: { wallMarked: boolean; paused: boolean; alias: string; data: typeof NPCS[number]; playerPosition: MutableRefObject<THREE.Vector3>; posterActive: boolean; onRecognize: SceneProps['onRecognize'] }) {
   const body = useRef<RapierRigidBody>(null);
   const visual = useRef<THREE.Group>(null);
   const moving = useRef(false);
@@ -430,6 +478,7 @@ function Civilian({ data, playerPosition, posterActive, onRecognize, paused, ali
   const reacted = useRef(false);
   const observation = useRef(0);
   const [speech, setSpeech] = useState('');
+  useEffect(() => { reacted.current = false; observation.current = 0; setSpeech(''); }, [wallMarked]);
   const points = data.path;
   const { rayClear } = usePoliceGeometry();
   useFrame((_, delta) => {
@@ -456,7 +505,7 @@ function Civilian({ data, playerPosition, posterActive, onRecognize, paused, ali
     const player = playerPosition.current;
     const range = data.influencer ? 8.5 : 6.2;
     const pd = Math.hypot(player.x - position.x, player.z - position.z);
-    const knowsPoster = data.influencer || POSTERS.some(([x, z]) => Math.hypot(position.x - x, position.z - z) < 14);
+    const knowsPoster = wallMarked || data.influencer || POSTERS.some(([x, z]) => Math.hypot(position.x - x, position.z - z) < 14);
     const observing = knowsPoster && pd < range && rayClear(position, player, 1.4);
     observation.current = observing ? observation.current + observationStep : 0;
     if (observation.current >= (data.influencer ? .8 : 1.4)) {
@@ -464,7 +513,7 @@ function Civilian({ data, playerPosition, posterActive, onRecognize, paused, ali
       moving.current = false;
       rb.setLinvel({ x: 0, y: velocity.y, z: 0 }, true);
       node.rotation.y = Math.atan2(player.x - position.x, player.z - position.z);
-      setSpeech(data.influencer ? `That is ${alias}! Sending the location to VMPD.` : 'You match the poster. Calling VMPD!');
+      setSpeech(wallMarked ? `That is ${alias}, by the marked wall. Calling VMPD!` : 'That face looks familiar. Is that you on the poster?');
       onRecognize(data.id, data.role, data.influencer, { x: player.x, z: player.z });
       window.setTimeout(() => setSpeech(''), 4200);
     }
@@ -475,7 +524,7 @@ function Civilian({ data, playerPosition, posterActive, onRecognize, paused, ali
   </RigidBody>;
 }
 
-function PoliceOfficer({ position: spawn, playerPosition, active, awareness, onDetect, paused, pursuitActive }: { paused: boolean; pursuitActive: boolean; position: [number, number, number]; playerPosition: MutableRefObject<THREE.Vector3>; active: boolean; awareness: number; onDetect: SceneProps['onPoliceDetect'] }) {
+function PoliceOfficer({ position: spawn, playerPosition, active, awareness, onDetect, paused, pursuitActive, responseEnabled }: { responseEnabled: boolean; paused: boolean; pursuitActive: boolean; position: [number, number, number]; playerPosition: MutableRefObject<THREE.Vector3>; active: boolean; awareness: number; onDetect: SceneProps['onPoliceDetect'] }) {
   const body = useRef<RapierRigidBody>(null);
   const visual = useRef<THREE.Group>(null);
   const moving = useRef(false);
@@ -488,7 +537,7 @@ function PoliceOfficer({ position: spawn, playerPosition, active, awareness, onD
   const officer = spawn.join(',');
   useFrame((_, rawDelta) => {
     const rb = body.current, node = visual.current;
-    if (!rb || !node || !active || paused) { moving.current = false; return; }
+    if (!rb || !node || !active || paused || !responseEnabled) { moving.current = false; return; }
     const delta = Math.min(rawDelta, .05);
     const position = rb.translation(), velocity = rb.linvel(), player = playerPosition.current;
     const dx = player.x - position.x, dz = player.z - position.z;
@@ -578,6 +627,22 @@ function Billboard({ posterUrl, active, ad, accent }: { posterUrl: string; activ
   </group>;
 }
 
+function SignalWall({ wall, image }: { wall: typeof WALLS[number]; image?: string }) {
+  const blank = useMemo(makeWallCanvas, []);
+  const texture = useTexture(image || blank);
+  useEffect(() => { texture.colorSpace = THREE.SRGBColorSpace; texture.needsUpdate = true; }, [texture]);
+  return <RigidBody type="fixed" colliders={false} position={[wall.x, 0, wall.z]} rotation={[0, -Math.PI / 2, 0]}>
+    <CuboidCollider args={[2.8, 1.7, .24]} position={[0, 1.7, 0]} />
+    <mesh castShadow receiveShadow position={[0, 1.7, 0]}><boxGeometry args={[5.6, 3.4, .48]} /><meshStandardMaterial color="#514b48" roughness={.96} /></mesh>
+    <mesh receiveShadow position={[0, 1.65, .245]}><planeGeometry args={[5.2, 3.03]} /><meshStandardMaterial map={texture} roughness={.95} metalness={0} /></mesh>
+    <mesh position={[0, 3.42, 0]}><boxGeometry args={[5.8, .15, .7]} /><meshStandardMaterial color="#272d35" roughness={.7} /></mesh>
+    <mesh castShadow position={[-2.2, 3.7, .36]} rotation={[.25, .3, 0]}><boxGeometry args={[.18, .16, .42]} /><meshStandardMaterial color="#ccd0cd" roughness={.6} /></mesh>
+    <mesh position={[-2.2, 3.65, .59]}><sphereGeometry args={[.036, 8, 8]} /><meshBasicMaterial color="#ff655e" /></mesh>
+    <pointLight position={[0, 3.3, 1]} color="#ffe4bd" intensity={12} distance={7} />
+    <Html center position={[0, 3.85, 0]} distanceFactor={10}><div className="wall-world-label">{image ? 'SIGNAL LEFT' : 'E / LEAVE A SIGNAL'}</div></Html>
+  </RigidBody>;
+}
+
 function World({ posterUrl, district, alias, signals, playerPosition, onRecognize, onPoliceDetect }: Pick<SceneProps, 'posterUrl' | 'district' | 'alias' | 'signals' | 'onRecognize' | 'onPoliceDetect'> & { playerPosition: MutableRefObject<THREE.Vector3> }) {
   const theme = getDistrictTheme(district);
   const dispatch = useRef<Dispatch>({ location: null, remaining: 0 });
@@ -590,7 +655,7 @@ function World({ posterUrl, district, alias, signals, playerPosition, onRecogniz
     }
   }, [signals.report]);
   useFrame((_, delta) => {
-    if (signals.paused) return;
+    if (signals.paused || !signals.responseEnabled) return;
     dispatch.current.remaining = Math.max(0, dispatch.current.remaining - Math.min(delta, .05));
     sensorTimer.current += delta;
     if (sensorTimer.current < .1 || signals.elapsed < 14) return;
@@ -606,11 +671,11 @@ function World({ posterUrl, district, alias, signals, playerPosition, onRecogniz
     onPoliceDetect({ visible, distance, rate: visible ? (distance < 3 ? 28 : 14) : 0, contact: false, source: 'vehicle' }, 'patrol-camera');
   });
   return <DispatchContext.Provider value={dispatch}>
-    <Sky distance={450000} sunPosition={[-48, 8, -90]} inclination={.51} azimuth={.16} turbidity={10} rayleigh={3.2} mieCoefficient={.01} mieDirectionalG={.87} />
+    <Sky distance={450000} sunPosition={[-48, -1, -90]} inclination={.51} azimuth={.16} turbidity={7} rayleigh={2.4} mieCoefficient={.01} mieDirectionalG={.87} />
     <fog attach="fog" args={[theme.fog, 52, 150]} />
-    <hemisphereLight color={theme.secondary} groundColor={theme.fog} intensity={1.32} />
+    <hemisphereLight color="#a5b6df" groundColor={theme.fog} intensity={1.65} />
     <ambientLight intensity={.4} color="#9b89c4" />
-    <directionalLight castShadow position={[-35, 35, 18]} color="#ff9a70" intensity={3.1} shadow-mapSize={[1536, 1536]} shadow-bias={-.00015} shadow-camera-left={-70} shadow-camera-right={70} shadow-camera-top={70} shadow-camera-bottom={-70} />
+    <directionalLight castShadow position={[-35, 35, 18]} color="#ffc99e" intensity={1.7} shadow-mapSize={[2048, 2048]} shadow-bias={-.00015} shadow-camera-left={-70} shadow-camera-right={70} shadow-camera-top={70} shadow-camera-bottom={-70} />
     <pointLight position={[-34, 12, -65]} color={theme.accent} intensity={55} distance={50} decay={2} />
     <pointLight position={[-10, 6, -14]} color={theme.accent} intensity={30} distance={22} decay={2} />
     <pointLight position={[12, 5, -42]} color={theme.secondary} intensity={24} distance={20} decay={2} />
@@ -621,6 +686,7 @@ function World({ posterUrl, district, alias, signals, playerPosition, onRecogniz
     {Array.from({ length: 8 }, (_, i) => -4.1 + i * 1.18).map((x) => <mesh key={x} position={[x, .04, 10]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[.72, 7.8]} /><meshBasicMaterial color="#d9d4c4" /></mesh>)}
 
     <DistrictArchitecture theme={theme} />
+    {WALLS.map(wall => <SignalWall key={wall.id} wall={wall} image={signals.wallImages[wall.id]} />)}
 
     <RigidBody type="fixed" colliders={false}><CuboidCollider args={[55, 1.1, .5]} position={[0, 1.1, -71]} /><CuboidCollider args={[.5, 1.1, 72]} position={[-55, 1.1, 0]} /><CuboidCollider args={[.5, 1.1, 72]} position={[55, 1.1, 0]} /><CuboidCollider args={[22, 1.1, .5]} position={[-33, 1.1, 71]} /><CuboidCollider args={[22, 1.1, .5]} position={[33, 1.1, 71]} /></RigidBody>
     <Water color={theme.water} />
@@ -634,9 +700,9 @@ function World({ posterUrl, district, alias, signals, playerPosition, onRecogniz
 
     {signals.posterActive && <><PosterStand url={posterUrl} position={[10.7, 0, -36]} rotation={-Math.PI / 2} /><PosterStand url={posterUrl} position={[-10.7, 0, -10]} rotation={Math.PI / 2} /><Poster url={posterUrl} position={[7, 1.65, 17]} /><PosterStand url={posterUrl} position={[13.5, 0, 37.4]} rotation={Math.PI} /></>}
     <Billboard posterUrl={posterUrl} active={signals.billboardActive} ad={theme.billboard} accent={theme.accent} />
-    {NPCS.map((data) => <Civilian paused={signals.paused} alias={alias} key={data.id} data={data} playerPosition={playerPosition} posterActive={signals.posterActive} onRecognize={onRecognize} />)}
-    <PoliceOfficer paused={signals.paused} pursuitActive={signals.pursuitActive} position={[8, 0, 46]} playerPosition={playerPosition} active={signals.elapsed >= 14} awareness={signals.awareness} onDetect={onPoliceDetect} />
-    {signals.wantedLevel >= 4 && <PoliceOfficer paused={signals.paused} pursuitActive={signals.pursuitActive} position={[10, 0, 33]} playerPosition={playerPosition} active={signals.elapsed >= 20} awareness={signals.awareness} onDetect={onPoliceDetect} />}
+    {NPCS.map((data) => <Civilian wallMarked={signals.wallMarked} paused={signals.paused} alias={alias} key={data.id} data={data} playerPosition={playerPosition} posterActive={signals.posterActive} onRecognize={onRecognize} />)}
+    <PoliceOfficer responseEnabled={signals.responseEnabled} paused={signals.paused} pursuitActive={signals.pursuitActive} position={[8, 0, 46]} playerPosition={playerPosition} active={signals.elapsed >= 14 || signals.responseEnabled} awareness={signals.awareness} onDetect={onPoliceDetect} />
+    {signals.wantedLevel >= 4 && <PoliceOfficer responseEnabled={signals.responseEnabled} paused={signals.paused} pursuitActive={signals.pursuitActive} position={[7, 0, 33]} playerPosition={playerPosition} active={signals.elapsed >= 20 || signals.responseEnabled} awareness={signals.awareness} onDetect={onPoliceDetect} />}
 
     {Array.from({ length: 18 }, (_, i) => {
       const x = -85 + (i % 9) * 21;
