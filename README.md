@@ -66,16 +66,33 @@ The screenshots below follow the complete journey from identity creation to a li
 
 ### 4. Enter a playable district
 
-<table>
-  <tr>
-    <td width="50%"><a href="docs/screenshots/07-district-entry.webp"><img src="docs/screenshots/07-district-entry.webp" alt="Sunset Strip entry screen with gameplay controls" width="100%"></a></td>
-    <td width="50%"><a href="docs/screenshots/08-city-gameplay.webp"><img src="docs/screenshots/08-city-gameplay.webp" alt="Playable Sunset Strip district with the published poster in the city" width="100%"></a></td>
-  </tr>
-  <tr>
-    <td align="center"><b>District entry</b><br><sub>Review movement, camera, sprint, jump and interaction controls.</sub></td>
-    <td align="center"><b>Live city gameplay</b><br><sub>Find the published poster while pedestrians and patrols react.</sub></td>
-  </tr>
-</table>
+<p align="center">
+  <a href="docs/screenshots/07-district-entry.webp">
+    <img src="docs/screenshots/07-district-entry.webp" alt="Sunset Strip entry screen with gameplay controls" width="100%">
+  </a>
+</p>
+<p align="center"><sub><b>District entry</b> introduces movement, camera, sprint, jump and interaction controls before the simulation begins.</sub></p>
+
+#### The poster becomes part of the world
+
+Publishing does more than move to the next screen. VICE ID takes the exact poster exported from the second React Image Editor session and places it inside the selected 3D district. It remains the player's design, including their portrait, alias, wanted level, custom text, stickers, marks, filters and frame choices.
+
+<p align="center">
+  <a href="docs/screenshots/08-city-gameplay.webp">
+    <img src="docs/screenshots/08-city-gameplay.webp" alt="The customised wanted poster displayed on a street panel and a large billboard in playable Sunset Strip" width="100%">
+  </a>
+</p>
+<p align="center"><sub><b>One editor export, multiple city surfaces.</b> The street panel on the right presents a close physical copy while the distant billboard broadcasts the same wanted poster across Sunset Strip.</sub></p>
+
+| Poster presence | Purpose inside the experience |
+| --- | --- |
+| **Street panels and poster stands** | Make the edited asset discoverable at pedestrian level and give the player something physical to approach and inspect. |
+| **District billboard** | Expands the poster from a local notice into a citywide broadcast when reach or buzz becomes high enough. |
+| **Nearby witnesses** | Pedestrians close to the poster network can recognise the character, stop, react and report the last known location to VMPD. |
+| **Police response** | Witness tips and officer sightings increase awareness, bringing patrols toward the reported location and potentially starting a pursuit. |
+| **Persistent visual identity** | The same saved poster continues into the city story, evidence records, gameplay results and downloadable output. |
+
+Recognition is a fictional gameplay simulation based on poster activation, proximity and line of sight. The application does not analyse the uploaded face or perform real facial recognition.
 
 ### 5. Face the consequences
 
@@ -140,7 +157,7 @@ Uploaded portrait
               → Wanted-poster download
 ```
 
-**What the app adds around the editor:** VICE ID uses the browser Canvas API to compose the initial wanted-poster layout and final identity card. React Image Editor handles the player's image-editing work. The city simulation and 3D gameplay are separate systems that use the saved assets and character state.
+**What the app adds around the editor:** VICE ID uses the browser Canvas API to compose the initial wanted-poster layout and final identity card. React Image Editor handles the player's image-editing work. The city simulation and 3D gameplay then place the saved poster on street panels, poster stands and the district billboard so the editor output becomes part of play.
 
 Saved images are flattened exports. Editable layers and undo history are not persisted across separate editor sessions. The project does not use image analysis to calculate reputation or identify faces.
 
@@ -169,6 +186,8 @@ Explore **Overview**, **Activity**, **Known Locations** and **Evidence**. The do
 **Issue Wanted Poster** generates a 1080 × 1350 composition from your edited portrait and character details.
 
 Choose **Customize Poster** to open the second React Image Editor session. Add your own text, marks, stickers, filters or other edits, then preview, download or publish the actual result. Resizing in the editor can change the poster's dimensions.
+
+When the player publishes, VICE ID stores that exact editor export as `wantedPosterImage`. The experience does not swap it for a generic prop. Poster stands, street displays, the large district billboard, evidence views and downloads all read from the same saved image, keeping the creative result consistent from editing to gameplay.
 
 ### 5. Publish to City Impact
 
