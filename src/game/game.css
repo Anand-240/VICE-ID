@@ -43,6 +43,23 @@
 /* Street editing is a full, scrollable workspace above the paused scene. */
 .wall-editor-overlay{position:absolute;inset:0;z-index:250;background:#0b111c;color:#f4e7d3;overflow:auto;padding:24px clamp(14px,3vw,48px);touch-action:pan-y;cursor:default}
 .signal-options{display:grid;gap:8px;border:1px solid #344153;padding:16px;margin-bottom:16px;max-width:900px}
+/* Permanent studio dock: drawing is on from the first frame of the run. */
+.studio-dock{position:absolute;z-index:31;left:18px;bottom:190px;width:212px;border:1px solid #52d7e855;border-radius:5px;background:linear-gradient(150deg,rgba(9,16,27,.96),rgba(14,28,42,.92));box-shadow:0 12px 34px rgba(0,0,0,.45);backdrop-filter:blur(8px);overflow:hidden}
+.studio-dock-toggle{display:grid;grid-template-columns:16px 1fr auto 14px;align-items:center;gap:8px;width:100%;padding:10px 11px;background:#52d7e8;border:0;color:#08131d;cursor:pointer;text-align:left}
+.studio-dock-toggle svg{width:15px;height:15px}
+.studio-dock-toggle b{font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.08em}
+.studio-dock-toggle small{font:8px 'IBM Plex Mono',monospace;letter-spacing:.08em;opacity:.72}
+.studio-dock.collapsed .studio-dock-toggle svg:last-child{transform:rotate(-90deg)}
+.studio-dock-body{display:grid;gap:6px;padding:9px}
+.studio-dock-body button{display:grid;gap:3px;text-align:left;padding:8px 10px;border:1px solid #37506a;border-radius:3px;background:rgba(19,32,47,.9);color:#f4e7d3;cursor:pointer}
+.studio-dock-body button:hover,.studio-dock-body button:focus-visible{border-color:#52d7e8;background:#1d3549}
+.studio-dock-body button.active{border-color:#52d7e8;box-shadow:inset 2px 0 0 #52d7e8}
+.studio-dock-body b{font:600 9px 'IBM Plex Mono',monospace;letter-spacing:.07em;color:#7fe6f3}
+.studio-dock-body small{font:8px/1.45 'IBM Plex Mono',monospace;color:#9fb0c2}
+.studio-dock-body p{margin:2px 0 0;font:8px/1.5 'IBM Plex Mono',monospace;color:#8496a8}
+@media(max-width:900px){.studio-dock{bottom:238px;width:190px}}
+@media(max-width:650px){.studio-dock{left:10px;bottom:290px;width:172px}.studio-dock-body p{display:none}.wall-interaction{max-width:65%}}
+@media(max-height:700px){.studio-dock-body p{display:none}}
 .signal-options label{font:12px 'IBM Plex Mono',monospace;color:#52d7e8}
 .signal-options select{background:#162232;color:#f4e7d3;padding:12px;border:1px solid #53677e;border-radius:3px;width:100%;font:inherit}
 .signal-options p{font-size:12px;line-height:1.6;color:#b3bfce;margin:0}

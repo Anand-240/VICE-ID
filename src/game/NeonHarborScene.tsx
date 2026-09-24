@@ -1,3 +1,4 @@
+import { autoBoost, playerSpeed } from './movement';
 import { Html, Sky, useTexture } from '@react-three/drei';
 import { CuboidCollider, CapsuleCollider, Physics, RigidBody, useRapier, type RapierRigidBody } from '@react-three/rapier';
 import { useFrame, useThree } from '@react-three/fiber';
@@ -120,7 +121,7 @@ const Humanoid = memo(function Humanoid({ color, skin = '#b9785d', police = fals
   </group>;
 });
 
-function Player({ controls, cameraYaw, cameraPitch, paused, playerPosition, onNearPoster, onPosition, onMotion, spawn }: Pick<SceneProps, 'controls' | 'cameraYaw' | 'cameraPitch' | 'onNearPoster' | 'onPosition' | 'onMotion'> & { paused: boolean; playerPosition: MutableRefObject<THREE.Vector3>; spawn: [number, number] }) {
+function Player({ pursuit, controls, cameraYaw, cameraPitch, paused, playerPosition, onNearPoster, onPosition, onMotion, spawn }: Pick<SceneProps, 'controls' | 'cameraYaw' | 'cameraPitch' | 'onNearPoster' | 'onPosition' | 'onMotion'> & { pursuit: boolean; paused: boolean; playerPosition: MutableRefObject<THREE.Vector3>; spawn: [number, number] }) {
   const blockers = useContext(BlockersContext);
   const body = useRef<RapierRigidBody>(null);
   const model = useRef<THREE.Group>(null);
@@ -160,9 +161,9 @@ function Player({ controls, cameraYaw, cameraPitch, paused, playerPosition, onNe
     const moving = x !== 0 || z !== 0;
     if (stamina.current <= .5) sprintExhausted.current = true;
     if (stamina.current >= 25) sprintExhausted.current = false;
-    const wantsSprint = moving && grounded && controls.current.shift && !sprintExhausted.current;
-    stamina.current = THREE.MathUtils.clamp(stamina.current + delta * (wantsSprint ? -17 : grounded ? 12 : 7), 0, 100);
-    const sprinting = wantsSprint && stamina.current > 0;
+    const wantsSprint = moving && grounded && (pursuit || (controls.current.shift && !sprintExhausted.current));
+    stamina.current = THREE.MathUtils.clamp(stamina.current + delta * (pursuit ? 12 : wantsSprint ? -17 : grounded ? 12 : 7), 0, 100);
+    const sprinting = wantsSprint && (pursuit || stamina.current > 0);
     let targetX = 0;
     let targetZ = 0;
     if (moving) {
@@ -175,7 +176,7 @@ function Player({ controls, cameraYaw, cameraPitch, paused, playerPosition, onNe
       const rightZ = -Math.sin(yaw);
       const moveX = forwardX * z + rightX * x;
       const moveZ = forwardZ * z + rightZ * x;
-      const speed = sprinting ? 6.5 : 3.75;
+      const speed = playerSpeed(pursuit, sprinting);
       targetX = moveX * speed;
       targetZ = moveZ * speed;
       if (model.current) {
@@ -752,6 +753,6 @@ export function NeonHarborScene(props: SceneProps) {
   useEffect(() => { props.onReady(); }, [props.onReady]);
   return <BlockersContext.Provider value={blockers}><Physics paused={props.signals.paused} gravity={[0, -9.81, 0]} timeStep={1 / 60} interpolate>
     <World alias={props.alias} posterUrl={props.posterUrl} district={props.district} signals={props.signals} playerPosition={playerPosition} onRecognize={props.onRecognize} onPoliceDetect={props.onPoliceDetect} />
-    <Player controls={props.controls} cameraYaw={props.cameraYaw} cameraPitch={props.cameraPitch} paused={props.signals.paused} playerPosition={playerPosition} spawn={theme.spawn} onNearPoster={props.onNearPoster} onPosition={props.onPosition} onMotion={props.onMotion} />
+    <Player pursuit={autoBoost(props.signals.awareness, props.signals.pursuitActive)} controls={props.controls} cameraYaw={props.cameraYaw} cameraPitch={props.cameraPitch} paused={props.signals.paused} playerPosition={playerPosition} spawn={theme.spawn} onNearPoster={props.onNearPoster} onPosition={props.onPosition} onMotion={props.onMotion} />
   </Physics></BlockersContext.Provider>;
 }
