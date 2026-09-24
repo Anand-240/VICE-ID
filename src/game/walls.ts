@@ -22,6 +22,20 @@ export function closestWall(x: number, z: number) {
 export function wallResponseReady(age: number | null) {
   return age !== null && age >= WALL_REPORT_DELAY;
 }
+// The painted face of every surface looks down -x, so a wall can only be aimed
+// at from that side. Heading is the player's facing, 0 meaning straight ahead.
+export const TARGET_RANGE = 14;
+export function targetedWall(x: number, z: number, heading: number) {
+  return WALLS
+    .filter(wall => x < wall.x && Math.hypot(x - wall.x, z - wall.z) <= TARGET_RANGE)
+    .map(wall => {
+      const bearing = Math.atan2(wall.x - x, wall.z - z) - heading;
+      return { wall, aim: Math.abs(Math.atan2(Math.sin(bearing), Math.cos(bearing))) };
+    })
+    .filter(entry => entry.aim < Math.PI / 3)
+    .sort((a, b) => a.aim - b.aim)[0]?.wall;
+}
+
 export function nearbyWall(x: number, z: number) {
   return WALLS.find(wall => x < wall.x && Math.hypot(x - wall.x, z - wall.z) < 3.5);
 }

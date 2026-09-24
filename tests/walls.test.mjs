@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { closestWall, signalTarget, nearbyWall, wallResponseReady } from '../src/game/walls.ts';
+import { closestWall, signalTarget, nearbyWall, targetedWall, wallResponseReady, WALLS } from '../src/game/walls.ts';
 import { advanceAwareness, officerDetection } from '../src/game/police.ts';
 
 test('poster suspicion cannot enable police response; first mark has ten seconds of grace', () => {
@@ -33,4 +33,23 @@ test('signal choices produce separate bounded investigation destinations', () =>
   assert.deepEqual(signalTarget(wall, 'north'), { x: 6, z: 18 });
   assert.deepEqual(signalTarget(wall, 'south'), { x: 6, z: 46 });
   assert.equal(signalTarget({ x: 9, z: 58 }, 'south').z, 60);
+});
+
+test('the aimed wall is the one the player faces from its painted side', () => {
+  const canal = WALLS.find(wall => wall.id === 'canal');
+  // Standing back from the canal wall and looking straight at it.
+  const facing = Math.atan2(canal.x - 0, canal.z - 32);
+  assert.equal(targetedWall(0, 32, facing)?.id, 'canal');
+  // Same spot, back turned: nothing is targeted.
+  assert.equal(targetedWall(0, 32, facing + Math.PI), undefined);
+  // Behind the wall, where the painted face is unreachable.
+  assert.equal(targetedWall(canal.x + 4, 32, Math.atan2(-1, 0)), undefined);
+  // Too far away to aim at.
+  assert.equal(targetedWall(-40, 32, facing), undefined);
+});
+
+test('aiming picks the wall nearest the line of sight, not merely the nearest wall', () => {
+  const market = WALLS.find(wall => wall.id === 'market');
+  const toMarket = Math.atan2(market.x - 4, market.z - 6);
+  assert.equal(targetedWall(4, 6, toMarket)?.id, 'market');
 });

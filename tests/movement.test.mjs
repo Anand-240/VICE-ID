@@ -12,6 +12,7 @@ test('normal movement returns to walking or manual sprint after escape', () => {
   assert.equal(playerSpeed(false, true), 6.5);
 });
 test('boost engages on rising awareness before a pursuit starts', () => {
+  assert.equal(AUTO_BOOST_AWARENESS, 50);
   assert.equal(autoBoost(AUTO_BOOST_AWARENESS - 1, false), false);
   assert.equal(autoBoost(AUTO_BOOST_AWARENESS, false), true);
   assert.equal(autoBoost(0, true), true);

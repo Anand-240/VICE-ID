@@ -30,6 +30,10 @@ export interface SceneSignals {
   wallMarked: boolean;
   wallImages: Partial<Record<WallId, string>>;
   streetSignal: StreetSignal | null;
+  // The wall currently open in the editor, framed by the camera and repainted
+  // on every export while the player draws.
+  focusWall: WallId | null;
+  targetWall: WallId | null;
 }
 
 interface SceneProps {
@@ -121,7 +125,7 @@ const Humanoid = memo(function Humanoid({ color, skin = '#b9785d', police = fals
   </group>;
 });
 
-function Player({ pursuit, controls, cameraYaw, cameraPitch, paused, playerPosition, onNearPoster, onPosition, onMotion, spawn }: Pick<SceneProps, 'controls' | 'cameraYaw' | 'cameraPitch' | 'onNearPoster' | 'onPosition' | 'onMotion'> & { pursuit: boolean; paused: boolean; playerPosition: MutableRefObject<THREE.Vector3>; spawn: [number, number] }) {
+function Player({ pursuit, focus, controls, cameraYaw, cameraPitch, paused, playerPosition, onNearPoster, onPosition, onMotion, spawn }: Pick<SceneProps, 'controls' | 'cameraYaw' | 'cameraPitch' | 'onNearPoster' | 'onPosition' | 'onMotion'> & { pursuit: boolean; focus: Point | null; paused: boolean; playerPosition: MutableRefObject<THREE.Vector3>; spawn: [number, number] }) {
   const blockers = useContext(BlockersContext);
   const body = useRef<RapierRigidBody>(null);
   const model = useRef<THREE.Group>(null);
@@ -152,7 +156,7 @@ function Player({ pursuit, controls, cameraYaw, cameraPitch, paused, playerPosit
     const grounded = Boolean(groundHit && groundHit.timeOfImpact <= .3);
     let x = 0;
     let z = 0;
-    if (!paused) {
+    if (!paused && !focus) {
       if (controls.current.w || controls.current.arrowup) z += 1;
       if (controls.current.s || controls.current.arrowdown) z -= 1;
       if (controls.current.a || controls.current.arrowleft) x -= 1;
@@ -198,6 +202,29 @@ function Player({ pursuit, controls, cameraYaw, cameraPitch, paused, playerPosit
     const planarSpeed = Math.hypot(nextX, nextZ);
     playerPace.current = planarSpeed;
     movingRef.current = planarSpeed > .18 && grounded;
+
+    if (focus) {
+      // Frame the painted face, biased to one side so the editor panel does not
+      // cover the part of the wall the player is watching update.
+      const lens = camera instanceof THREE.PerspectiveCamera ? camera : null;
+      const halfTan = lens ? Math.tan(THREE.MathUtils.degToRad(lens.fov / 2)) : .55;
+      const wide = (lens?.aspect ?? 1.6) > 1.3;
+      const standOff = 7.2;
+      const lateral = wide ? .5 * halfTan * (lens?.aspect ?? 1.6) * standOff : 0;
+      const lift = wide ? 0 : .46 * halfTan * standOff;
+      targetCamera.set(focus.x - standOff, 1.9 + lift, focus.z + lateral);
+      camera.position.lerp(targetCamera, 1 - Math.exp(-delta * 5));
+      targetLook.set(focus.x, 1.75 + lift, focus.z + lateral);
+      camera.lookAt(targetLook);
+      if (lens) { const nextFov = THREE.MathUtils.damp(lens.fov, 58, 5, delta); if (Math.abs(nextFov - lens.fov) > .01) { lens.fov = nextFov; lens.updateProjectionMatrix(); } }
+      syncClock.current += delta;
+      if (syncClock.current > .12) {
+        syncClock.current = 0;
+        onPosition(pos.x, pos.z, model.current?.rotation.y || 0);
+        onMotion({ speed: planarSpeed, stamina: stamina.current, grounded, sprinting });
+      }
+      return;
+    }
 
     const runPullback = sprinting ? 1 : 0;
     const distance = 4.8 + runPullback;
@@ -660,10 +687,33 @@ function Billboard({ posterUrl, active, ad, accent }: { posterUrl: string; activ
   </group>;
 }
 
-function SignalWall({ wall, image }: { wall: typeof WALLS[number]; image?: string }) {
-  const blank = useMemo(() => makeWallCanvas(wall.id), [wall.id]);
-  const texture = useTexture(image || blank);
-  useEffect(() => { texture.colorSpace = THREE.SRGBColorSpace; texture.needsUpdate = true; }, [texture]);
+// A CanvasTexture, not useTexture: the surface is repainted several times a
+// second while the editor is open, and a suspending loader would both flash the
+// wall and grow drei's cache by one entry per exported frame.
+function useWallTexture(wall: WallId, image?: string) {
+  const blank = useMemo(() => makeWallCanvas(wall), [wall]);
+  const surface = useMemo(() => { const canvas = document.createElement('canvas'); canvas.width = 1200; canvas.height = 700; return canvas; }, []);
+  const texture = useMemo(() => { const value = new THREE.CanvasTexture(surface); value.colorSpace = THREE.SRGBColorSpace; value.anisotropy = 4; return value; }, [surface]);
+  useEffect(() => () => texture.dispose(), [texture]);
+  useEffect(() => {
+    let cancelled = false;
+    const bitmap = new Image();
+    bitmap.onload = () => {
+      if (cancelled) return;
+      const context = surface.getContext('2d');
+      if (!context) return;
+      context.clearRect(0, 0, surface.width, surface.height);
+      context.drawImage(bitmap, 0, 0, surface.width, surface.height);
+      texture.needsUpdate = true;
+    };
+    bitmap.src = image || blank;
+    return () => { cancelled = true; };
+  }, [image, blank, surface, texture]);
+  return texture;
+}
+
+function SignalWall({ wall, image, focused, targeted }: { wall: typeof WALLS[number]; image?: string; focused: boolean; targeted: boolean }) {
+  const texture = useWallTexture(wall.id, image);
   return <RigidBody type="fixed" colliders={false} position={[wall.x, 0, wall.z]} rotation={[0, -Math.PI / 2, 0]}>
     <CuboidCollider args={[2.8, 1.7, .24]} position={[0, 1.7, 0]} />
     <mesh castShadow receiveShadow position={[0, 1.7, 0]}><boxGeometry args={[5.6, 3.4, .48]} /><meshStandardMaterial color="#514b48" roughness={.96} /></mesh>
@@ -671,8 +721,9 @@ function SignalWall({ wall, image }: { wall: typeof WALLS[number]; image?: strin
     <mesh position={[0, 3.42, 0]}><boxGeometry args={[5.8, .15, .7]} /><meshStandardMaterial color="#272d35" roughness={.7} /></mesh>
     <mesh castShadow position={[-2.2, 3.7, .36]} rotation={[.25, .3, 0]}><boxGeometry args={[.18, .16, .42]} /><meshStandardMaterial color="#ccd0cd" roughness={.6} /></mesh>
     <mesh position={[-2.2, 3.65, .59]}><sphereGeometry args={[.036, 8, 8]} /><meshBasicMaterial color="#ff655e" /></mesh>
-    <pointLight position={[0, 3.3, 1]} color="#ffe4bd" intensity={12} distance={7} />
-    <Html center zIndexRange={[10, 0]} position={[0, 3.85, 0]} distanceFactor={10}><div className="wall-world-label">{image ? 'SIGNAL LEFT' : 'E / LEAVE A SIGNAL'}</div></Html>
+    <pointLight position={[0, 3.3, 1]} color={focused ? '#bdf3ff' : '#ffe4bd'} intensity={focused ? 26 : 12} distance={focused ? 11 : 7} />
+    {(focused || targeted) && <mesh position={[0, 1.65, .26]}><planeGeometry args={[5.34, 3.17]} /><meshBasicMaterial color={focused ? '#7ef0ff' : '#52d7e8'} transparent opacity={focused ? .2 : .1} depthWrite={false} /></mesh>}
+    <Html center zIndexRange={[10, 0]} position={[0, 3.85, 0]} distanceFactor={10}><div className={`wall-world-label ${focused ? 'live' : targeted ? 'targeted' : ''}`}>{focused ? 'PAINTING LIVE' : targeted ? 'TARGET / PRESS E' : image ? 'SIGNAL LEFT' : 'E / LEAVE A SIGNAL'}</div></Html>
   </RigidBody>;
 }
 
@@ -719,7 +770,7 @@ function World({ posterUrl, district, alias, signals, playerPosition, onRecogniz
     {Array.from({ length: 8 }, (_, i) => -4.1 + i * 1.18).map((x) => <mesh key={x} position={[x, .04, 10]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[.72, 7.8]} /><meshBasicMaterial color="#d9d4c4" /></mesh>)}
 
     <DistrictArchitecture theme={theme} />
-    {WALLS.map(wall => <SignalWall key={wall.id} wall={wall} image={signals.wallImages[wall.id]} />)}
+    {WALLS.map(wall => <SignalWall key={wall.id} wall={wall} image={signals.wallImages[wall.id]} focused={signals.focusWall === wall.id} targeted={signals.targetWall === wall.id && signals.focusWall === null} />)}
 
     <RigidBody type="fixed" colliders={false}><CuboidCollider args={[55, 1.1, .5]} position={[0, 1.1, -71]} /><CuboidCollider args={[.5, 1.1, 72]} position={[-55, 1.1, 0]} /><CuboidCollider args={[.5, 1.1, 72]} position={[55, 1.1, 0]} /><CuboidCollider args={[22, 1.1, .5]} position={[-33, 1.1, 71]} /><CuboidCollider args={[22, 1.1, .5]} position={[33, 1.1, 71]} /></RigidBody>
     <Water color={theme.water} />
@@ -753,6 +804,6 @@ export function NeonHarborScene(props: SceneProps) {
   useEffect(() => { props.onReady(); }, [props.onReady]);
   return <BlockersContext.Provider value={blockers}><Physics paused={props.signals.paused} gravity={[0, -9.81, 0]} timeStep={1 / 60} interpolate>
     <World alias={props.alias} posterUrl={props.posterUrl} district={props.district} signals={props.signals} playerPosition={playerPosition} onRecognize={props.onRecognize} onPoliceDetect={props.onPoliceDetect} />
-    <Player pursuit={autoBoost(props.signals.awareness, props.signals.pursuitActive)} controls={props.controls} cameraYaw={props.cameraYaw} cameraPitch={props.cameraPitch} paused={props.signals.paused} playerPosition={playerPosition} spawn={theme.spawn} onNearPoster={props.onNearPoster} onPosition={props.onPosition} onMotion={props.onMotion} />
+    <Player pursuit={autoBoost(props.signals.awareness, props.signals.pursuitActive)} focus={props.signals.focusWall ? WALLS.find(wall => wall.id === props.signals.focusWall) ?? null : null} controls={props.controls} cameraYaw={props.cameraYaw} cameraPitch={props.cameraPitch} paused={props.signals.paused} playerPosition={playerPosition} spawn={theme.spawn} onNearPoster={props.onNearPoster} onPosition={props.onPosition} onMotion={props.onMotion} />
   </Physics></BlockersContext.Provider>;
 }

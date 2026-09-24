@@ -80,3 +80,31 @@
 .wall-world-label{white-space:nowrap;background:#0c1521e8;color:#6de5ed;border:1px solid #6de5ed66;padding:7px 11px;font:10px 'IBM Plex Mono',monospace;letter-spacing:.08em;pointer-events:none}
 .wall-interaction{border-color:#52d7e8;max-width:calc(100% - 32px)}
 @media(max-width:650px){.wall-editor-overlay{padding:14px}.wall-editor-overlay>footer{align-items:stretch;flex-direction:column}.wall-editor-overlay header .secondary{min-width:90px;padding:10px}.wall-editor-overlay>p{font-size:12px}.wall-interaction{bottom:250px}.wall-interaction span{font-size:9px}}
+
+/* Live wall painting: the editor is a side panel so the wall it repaints stays
+   on screen, and the district behind it keeps running. */
+.wall-studio{position:absolute;z-index:250;top:0;right:0;bottom:0;width:min(58vw,880px);display:flex;flex-direction:column;gap:12px;padding:18px clamp(14px,1.6vw,24px);background:linear-gradient(180deg,rgba(9,15,25,.98),rgba(11,17,28,.99));border-left:1px solid #52d7e855;box-shadow:-18px 0 60px rgba(0,0,0,.55);overflow:auto;touch-action:pan-y;cursor:default}
+.wall-studio>header{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid #344153;padding-bottom:12px}
+.wall-studio h2{font-family:Anton,sans-serif;font-size:clamp(22px,2.4vw,34px);margin:4px 0 0;line-height:1.15}
+.wall-studio small{font:10px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#52d7e8}
+.wall-studio>header .secondary{min-width:150px;padding:11px 14px;white-space:nowrap}
+.wall-studio>p{margin:0;color:#aab9ca;font:12px/1.65 Manrope,sans-serif}
+.wall-studio-live{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:#2b3a4d;border:1px solid #33445a;border-radius:4px;overflow:hidden}
+.wall-studio-live span{display:grid;gap:5px;padding:9px 12px;background:rgba(15,25,38,.95)}
+.wall-studio-live small{font-size:9px;color:#8a9bad;letter-spacing:.09em}
+.wall-studio-live b{font:600 14px 'IBM Plex Mono',monospace;color:#e6f3f7}
+.wall-studio-live b.hot{color:#ff7466}
+.wall-studio .signal-options{margin:0;padding:12px;gap:6px}
+.wall-studio .signal-options p{font-size:11px}
+.wall-studio .editor-scroll{min-height:430px}
+.wall-studio>footer{display:flex;gap:18px;justify-content:space-between;align-items:center;padding:6px 0 2px}
+.wall-studio footer>div{display:grid;gap:6px}
+.wall-studio footer b{font:11px 'IBM Plex Mono',monospace;letter-spacing:.09em;color:#52d7e8}
+.wall-studio footer span{color:#9caabb;font:11px/1.55 Manrope,sans-serif}
+.wall-studio footer p{color:#ffb28e;margin:0;font-size:11px}
+.wall-studio footer button{min-width:190px}
+.wall-world-label.targeted{color:#8ff2ff;border-color:#8ff2ff;box-shadow:0 0 16px rgba(143,242,255,.35)}
+.wall-world-label.live{color:#0a1119;background:#7ef0ff;border-color:#d8fbff;animation:wallLive 1.1s ease-in-out infinite alternate}
+@keyframes wallLive{to{box-shadow:0 0 22px rgba(126,240,255,.75)}}
+@media(max-width:900px){.wall-studio{top:auto;left:0;width:auto;height:62vh;border-left:0;border-top:1px solid #52d7e855;box-shadow:0 -18px 50px rgba(0,0,0,.6)}.wall-studio>p{display:none}.wall-studio>header .secondary{min-width:110px;font-size:10px}}
+@media(prefers-reduced-motion:reduce){.wall-world-label.live{animation:none}}
