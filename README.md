@@ -18,6 +18,85 @@ Watch the complete journey from character creation and React Image Editor custom
 
 [Watch the full VICE ID demo on YouTube](https://youtu.be/e4qh5EbIwJo)
 
+## Product Walkthrough
+
+The screenshots below follow the complete journey from identity creation to a live police pursuit. Select any image to open the larger version.
+
+<p align="center">
+  <a href="docs/screenshots/01-landing.webp">
+    <img src="docs/screenshots/01-landing.webp" alt="VICE ID landing page overlooking Vice Coast" width="100%">
+  </a>
+</p>
+<p align="center"><sub><b>Enter Vice Coast</b> and begin building the identity the city will remember.</sub></p>
+
+### 1. Create the identity
+
+<table>
+  <tr>
+    <td width="50%"><a href="docs/screenshots/02-identity-registration.webp"><img src="docs/screenshots/02-identity-registration.webp" alt="VICE ID terminal style identity registration form" width="100%"></a></td>
+    <td width="50%"><a href="docs/screenshots/03-character-options.webp"><img src="docs/screenshots/03-character-options.webp" alt="VICE ID district and lifestyle selection cards" width="100%"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Identity registration</b><br><sub>Enter a name, alias and optional crew while the live preview updates.</sub></td>
+    <td align="center"><b>District and lifestyle</b><br><sub>Select one of seven districts and a reputation profile.</sub></td>
+  </tr>
+</table>
+
+### 2. Edit the portrait with React Image Editor
+
+<p align="center">
+  <a href="docs/screenshots/04-react-image-editor.webp">
+    <img src="docs/screenshots/04-react-image-editor.webp" alt="Official React Image Editor integrated into VICE Studio" width="100%">
+  </a>
+</p>
+<p align="center"><sub><b>VICE Studio</b> embeds the official React Image Editor with crop, resize, filters, drawing, text, shapes, stickers and frames.</sub></p>
+
+### 3. Turn the edit into a city asset
+
+<table>
+  <tr>
+    <td width="50%"><a href="docs/screenshots/05-wanted-poster.webp"><img src="docs/screenshots/05-wanted-poster.webp" alt="Generated wanted poster ready for a second editor pass" width="100%"></a></td>
+    <td width="50%"><a href="docs/screenshots/06-city-impact.webp"><img src="docs/screenshots/06-city-impact.webp" alt="Interactive City Impact map and selected district details" width="100%"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Wanted Poster Studio</b><br><sub>Customise, save and publish the generated poster.</sub></td>
+    <td align="center"><b>City Impact</b><br><sub>Track sightings, police units, social buzz and district activity.</sub></td>
+  </tr>
+</table>
+
+### 4. Enter a playable district
+
+<table>
+  <tr>
+    <td width="50%"><a href="docs/screenshots/07-district-entry.webp"><img src="docs/screenshots/07-district-entry.webp" alt="Sunset Strip entry screen with gameplay controls" width="100%"></a></td>
+    <td width="50%"><a href="docs/screenshots/08-city-gameplay.webp"><img src="docs/screenshots/08-city-gameplay.webp" alt="Playable Sunset Strip district with the published poster in the city" width="100%"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b>District entry</b><br><sub>Review movement, camera, sprint, jump and interaction controls.</sub></td>
+    <td align="center"><b>Live city gameplay</b><br><sub>Find the published poster while pedestrians and patrols react.</sub></td>
+  </tr>
+</table>
+
+### 5. Face the consequences
+
+<table>
+  <tr>
+    <td width="50%"><a href="docs/screenshots/09-police-contact.webp"><img src="docs/screenshots/09-police-contact.webp" alt="Police officer identifying the player during gameplay" width="100%"></a></td>
+    <td width="50%"><a href="docs/screenshots/10-active-pursuit.webp"><img src="docs/screenshots/10-active-pursuit.webp" alt="Active VMPD pursuit at one hundred percent police awareness" width="100%"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Police awareness</b><br><sub>Visual contact increases awareness according to distance and exposure.</sub></td>
+    <td align="center"><b>Active pursuit</b><br><sub>Break line of sight and remain hidden to escape VMPD.</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <a href="docs/screenshots/11-apprehended.webp">
+    <img src="docs/screenshots/11-apprehended.webp" alt="VICE ID apprehended outcome screen" width="100%">
+  </a>
+</p>
+<p align="center"><sub><b>District outcome</b> records the arrest in the city story or lets the player retry.</sub></p>
+
 ## The idea
 
 Most image-editing experiences end with a download. VICE ID asks: **what happens after the image is published?**
