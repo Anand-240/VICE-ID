@@ -224,6 +224,10 @@ Movement uses Rapier physics for gravity and collisions, with acceleration, brak
 
 Posters create suspicion without starting a pursuit. Approach a service wall marked by a cyan diamond on the minimap and press **E** to open Unlayer React Image Editor. Draw or write on its surface, then choose **Publish on Wall**. The exported image becomes the wall's texture.
 
+A distance and direction guide points to the nearest editable surface. Choose a brick wall, market shutter or club notice panel. These are designated editing surfaces, not every building or prop in the district.
+
+Before drawing, choose the signal's purpose: leave a message, or plant a false trail pointing north or south. Your artwork is exported by Unlayer React Image Editor; the selected purpose controls the gameplay reaction. The game does not interpret the words or symbols in your image. Nearby pedestrians with a clear view can follow the false trail for up to 25 seconds, using obstacle-aware paths. Dispatch receives the indicated location after the initial response delay. Direct officer sightings and fresh witness reports can expose your real location instead. A sign is a distraction, not guaranteed protection from arrest.
+
 The first publication gives you **10 seconds of active game time** before dispatch responds. Nearby witnesses can report you; street surveillance also logs the wall incident. Police investigate the reported location, then use sight and distance to identify and approach you. Reaching **100% police awareness** offers pursuit or surrender. Capture requires physical officer contact; breaking sight gives you a chance to escape. Pausing or opening the editor freezes the countdown. Additional marks do not reset the initial delay.
 
 Characters have articulated arms and legs, pace-dependent animation and a closer shoulder camera. Movement, police contact and routes around solid obstacles use the existing physics and detection systems. Escape and capture results feed back into the city state. Wall artwork stays in the current district run and clears when you restart or leave it.

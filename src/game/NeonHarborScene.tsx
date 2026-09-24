@@ -5,7 +5,7 @@ import { createContext, useContext, memo, useEffect, useMemo, useRef, useState, 
 import * as THREE from 'three';
 import { getDistrictTheme, type DistrictTheme } from './districts';
 import { findPolicePath, officerDetection, policeSpeed, type PoliceDetection, type ReportedLocation, type Point } from './police';
-import { WALLS, makeWallCanvas, type WallId } from './walls';
+import { WALLS, makeWallCanvas, type WallId, type StreetSignal } from './walls';
 
 export type ControlState = Record<string, boolean>;
 
@@ -28,6 +28,7 @@ export interface SceneSignals {
   responseEnabled: boolean;
   wallMarked: boolean;
   wallImages: Partial<Record<WallId, string>>;
+  streetSignal: StreetSignal | null;
 }
 
 interface SceneProps {
@@ -409,7 +410,16 @@ function Palm({ position, scale = 1 }: { position: [number, number, number]; sca
 }
 
 function Car({ position, rotation = 0, color = '#7c2841', police = false }: { position: [number, number, number]; rotation?: number; color?: string; police?: boolean }) {
-  return <RigidBody type="fixed" colliders={false} position={position} rotation={[0, rotation, 0]}><CuboidCollider args={[1.05, .55, 2.15]} position={[0, .55, 0]} /><group><mesh castShadow position={[0, .55, 0]}><boxGeometry args={[2.05, .65, 4.2]} /><meshStandardMaterial color={police ? '#e4e7e9' : color} metalness={.58} roughness={.3} /></mesh><mesh castShadow position={[0, 1.03, -.2]}><boxGeometry args={[1.7, .62, 2.15]} /><meshStandardMaterial color="#152331" metalness={.72} roughness={.18} /></mesh>{[-.92, .92].flatMap((x) => [-1.32, 1.32].map((z) => <mesh key={`${x}-${z}`} castShadow position={[x, .35, z]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[.35, .35, .22, 12]} /><meshStandardMaterial color="#101216" roughness={.8} /></mesh>))}{police && <PoliceLights />}</group></RigidBody>;
+  return <RigidBody type="fixed" colliders={false} position={position} rotation={[0, rotation, 0]}><CuboidCollider args={[1.05, .55, 2.15]} position={[0, .55, 0]} /><group><mesh castShadow position={[0, .55, 0]}><boxGeometry args={[2.05, .65, 4.2]} /><meshStandardMaterial color={police ? '#e4e7e9' : color} metalness={.58} roughness={.3} /></mesh><mesh castShadow position={[0, 1.03, -.2]}><boxGeometry args={[1.7, .62, 2.15]} /><meshStandardMaterial color="#152331" metalness={.72} roughness={.18} /></mesh>{[-.92, .92].flatMap((x) => [-1.32, 1.32].map((z) => <mesh key={`${x}-${z}`} castShadow position={[x, .35, z]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[.35, .35, .22, 12]} /><meshStandardMaterial color="#101216" roughness={.8} /></mesh>))}{[-.68, .68].map(x => <group key={x}>
+      <mesh position={[x, .67, 2.115]}><boxGeometry args={[.48, .18, .035]} /><meshStandardMaterial color="#fff1cd" emissive="#ffe2ab" emissiveIntensity={2.5} /></mesh>
+      <mesh position={[x, .67, -2.115]}><boxGeometry args={[.5, .15, .035]} /><meshStandardMaterial color="#952537" emissive="#f44046" emissiveIntensity={1.3} /></mesh>
+    </group>)}
+    <mesh position={[0, .4, 2.13]}><boxGeometry args={[1.9, .12, .12]} /><meshStandardMaterial color="#87959d" metalness={.8} roughness={.3} /></mesh>
+    <mesh position={[0, .61, 2.13]}><boxGeometry args={[.65, .2, .04]} /><meshStandardMaterial color="#161d25" /></mesh>
+    <mesh position={[0, 1.36, -.2]}><boxGeometry args={[1.75, .08, 2.2]} /><meshStandardMaterial color={police ? '#293443' : color} metalness={.5} roughness={.32} /></mesh>
+    {[-.88, .88].map(x => <mesh key={x} position={[x, 1.02, -.2]}><boxGeometry args={[.06, .63, .08]} /><meshStandardMaterial color={police ? '#e4e7e9' : color} metalness={.45} /></mesh>)}
+    <mesh position={[0, .018, 3.5]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[2.1, 2.6]} /><meshBasicMaterial color="#ffe2ab" transparent opacity={.07} depthWrite={false} /></mesh>
+    {police && <PoliceLights />}</group></RigidBody>;
 }
 
 function PoliceLights() {
@@ -469,7 +479,7 @@ function usePoliceGeometry() {
   return { rayClear, walkClear, world, rapier };
 }
 
-function Civilian({ data, playerPosition, posterActive, onRecognize, paused, alias, wallMarked }: { wallMarked: boolean; paused: boolean; alias: string; data: typeof NPCS[number]; playerPosition: MutableRefObject<THREE.Vector3>; posterActive: boolean; onRecognize: SceneProps['onRecognize'] }) {
+function Civilian({ data, playerPosition, posterActive, onRecognize, paused, alias, wallMarked, signal }: { signal: StreetSignal | null; wallMarked: boolean; paused: boolean; alias: string; data: typeof NPCS[number]; playerPosition: MutableRefObject<THREE.Vector3>; posterActive: boolean; onRecognize: SceneProps['onRecognize'] }) {
   const body = useRef<RapierRigidBody>(null);
   const visual = useRef<THREE.Group>(null);
   const moving = useRef(false);
@@ -477,16 +487,38 @@ function Civilian({ data, playerPosition, posterActive, onRecognize, paused, ali
   const decision = useRef(0);
   const reacted = useRef(false);
   const observation = useRef(0);
+  const followedSignal = useRef(0);
+  const diversion = useRef<Point[]>([]);
   const [speech, setSpeech] = useState('');
   useEffect(() => { reacted.current = false; observation.current = 0; setSpeech(''); }, [wallMarked]);
   const points = data.path;
-  const { rayClear } = usePoliceGeometry();
+  const { rayClear, walkClear } = usePoliceGeometry();
   useFrame((_, delta) => {
     const rb = body.current;
     const node = visual.current;
     if (!rb || !node || paused) { moving.current = false; return; }
     const position = rb.translation();
     const velocity = rb.linvel();
+    // Reading a sign is local and visibility-dependent, not a citywide command.
+    if (!signal) diversion.current = [];
+    if (signal && signal.intent !== 'mark' && followedSignal.current !== signal.sequence && Math.hypot(position.x - signal.origin.x, position.z - signal.origin.z) < 10 && rayClear(position, signal.origin, 1.4)) {
+      followedSignal.current = signal.sequence;
+      diversion.current = findPolicePath(position, signal.target, walkClear);
+    }
+    const directWitness = Math.hypot(position.x - playerPosition.current.x, position.z - playerPosition.current.z) < 3 && rayClear(position, playerPosition.current, 1.4);
+    if (directWitness) diversion.current = [];
+    const lead = diversion.current[0];
+    if (lead && !speech) {
+      const dx = lead.x - position.x, dz = lead.z - position.z, distance = Math.hypot(dx, dz);
+      if (distance < .5) diversion.current.shift();
+      else {
+        const blend = 1 - Math.exp(-Math.min(delta, .05) * 5.5);
+        rb.setLinvel({ x: THREE.MathUtils.lerp(velocity.x, dx / distance * data.speed, blend), y: velocity.y, z: THREE.MathUtils.lerp(velocity.z, dz / distance * data.speed, blend) }, true);
+        node.rotation.y = THREE.MathUtils.damp(node.rotation.y, Math.atan2(dx, dz), 9, delta);
+        moving.current = true;
+        return;
+      }
+    }
     const [tx, tz] = points[target.current];
     const dx = tx - position.x;
     const dz = tz - position.z;
@@ -628,7 +660,7 @@ function Billboard({ posterUrl, active, ad, accent }: { posterUrl: string; activ
 }
 
 function SignalWall({ wall, image }: { wall: typeof WALLS[number]; image?: string }) {
-  const blank = useMemo(makeWallCanvas, []);
+  const blank = useMemo(() => makeWallCanvas(wall.id), [wall.id]);
   const texture = useTexture(image || blank);
   useEffect(() => { texture.colorSpace = THREE.SRGBColorSpace; texture.needsUpdate = true; }, [texture]);
   return <RigidBody type="fixed" colliders={false} position={[wall.x, 0, wall.z]} rotation={[0, -Math.PI / 2, 0]}>
@@ -639,7 +671,7 @@ function SignalWall({ wall, image }: { wall: typeof WALLS[number]; image?: strin
     <mesh castShadow position={[-2.2, 3.7, .36]} rotation={[.25, .3, 0]}><boxGeometry args={[.18, .16, .42]} /><meshStandardMaterial color="#ccd0cd" roughness={.6} /></mesh>
     <mesh position={[-2.2, 3.65, .59]}><sphereGeometry args={[.036, 8, 8]} /><meshBasicMaterial color="#ff655e" /></mesh>
     <pointLight position={[0, 3.3, 1]} color="#ffe4bd" intensity={12} distance={7} />
-    <Html center position={[0, 3.85, 0]} distanceFactor={10}><div className="wall-world-label">{image ? 'SIGNAL LEFT' : 'E / LEAVE A SIGNAL'}</div></Html>
+    <Html center zIndexRange={[10, 0]} position={[0, 3.85, 0]} distanceFactor={10}><div className="wall-world-label">{image ? 'SIGNAL LEFT' : 'E / LEAVE A SIGNAL'}</div></Html>
   </RigidBody>;
 }
 
@@ -700,7 +732,7 @@ function World({ posterUrl, district, alias, signals, playerPosition, onRecogniz
 
     {signals.posterActive && <><PosterStand url={posterUrl} position={[10.7, 0, -36]} rotation={-Math.PI / 2} /><PosterStand url={posterUrl} position={[-10.7, 0, -10]} rotation={Math.PI / 2} /><Poster url={posterUrl} position={[7, 1.65, 17]} /><PosterStand url={posterUrl} position={[13.5, 0, 37.4]} rotation={Math.PI} /></>}
     <Billboard posterUrl={posterUrl} active={signals.billboardActive} ad={theme.billboard} accent={theme.accent} />
-    {NPCS.map((data) => <Civilian wallMarked={signals.wallMarked} paused={signals.paused} alias={alias} key={data.id} data={data} playerPosition={playerPosition} posterActive={signals.posterActive} onRecognize={onRecognize} />)}
+    {NPCS.map((data) => <Civilian signal={signals.streetSignal} wallMarked={signals.wallMarked} paused={signals.paused} alias={alias} key={data.id} data={data} playerPosition={playerPosition} posterActive={signals.posterActive} onRecognize={onRecognize} />)}
     <PoliceOfficer responseEnabled={signals.responseEnabled} paused={signals.paused} pursuitActive={signals.pursuitActive} position={[8, 0, 46]} playerPosition={playerPosition} active={signals.elapsed >= 14 || signals.responseEnabled} awareness={signals.awareness} onDetect={onPoliceDetect} />
     {signals.wantedLevel >= 4 && <PoliceOfficer responseEnabled={signals.responseEnabled} paused={signals.paused} pursuitActive={signals.pursuitActive} position={[7, 0, 33]} playerPosition={playerPosition} active={signals.elapsed >= 20 || signals.responseEnabled} awareness={signals.awareness} onDetect={onPoliceDetect} />}
 

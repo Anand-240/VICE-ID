@@ -11,7 +11,7 @@ import './game.css';
 import { advanceAwareness, type PoliceDetection, type ReportedLocation, type Point } from './police';
 import { DistrictMinimap } from './DistrictMinimap';
 import { ViceImageEditor, type ViceEditorHandle } from '../components/editor/ViceImageEditor';
-import { WALL_REPORT_DELAY, makeWallCanvas, nearbyWall, wallResponseReady, type WallId } from './walls';
+import { WALLS, WALL_REPORT_DELAY, closestWall, signalTarget, makeWallCanvas, nearbyWall, wallResponseReady, type WallId, type SignalIntent, type StreetSignal } from './walls';
 
 interface Props { onContinue: () => void; onReturn: () => void; }
 
@@ -46,6 +46,8 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
   const [wallSource, setWallSource] = useState('');
   const [wallReady, setWallReady] = useState(false);
   const [wallNotice, setWallNotice] = useState('');
+  const [signalIntent, setSignalIntent] = useState<SignalIntent>('mark');
+  const [streetSignal, setStreetSignal] = useState<StreetSignal | null>(null);
   const wallEditor = useRef<ViceEditorHandle>(null);
   const [wallAge, setWallAge] = useState<number | null>(null);
   const wallIncident = useRef<Point | null>(null);
@@ -88,10 +90,13 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
   const policeCount = c.wantedLevel >= 4 && (elapsed >= 20 || responseEnabled) ? 2 : elapsed >= 14 || responseEnabled ? 1 : 0;
   const worldPaused = paused || summary || posterOpen || Boolean(wallOpen) || loading || intro || tutorial || pursuitPrompt || captured;
   const nearestWall = nearbyWall(playerMap.x, playerMap.z);
+  const guideWall = closestWall(playerMap.x, playerMap.z);
+  const wallDistance = Math.round(Math.hypot(guideWall.x - playerMap.x, guideWall.z - playerMap.z));
+  const wallBearing = Math.atan2(guideWall.x - playerMap.x, guideWall.z - playerMap.z) - playerMap.heading;
   const openWall = () => {
     if (!nearestWall || worldPaused || pursuitActive) return;
-    setWallSource(wallImages[nearestWall.id] || makeWallCanvas());
-    setWallReady(false); setWallNotice(''); setWallOpen(nearestWall.id);
+    setWallSource(wallImages[nearestWall.id] || makeWallCanvas(nearestWall.id));
+    setWallReady(false); setWallNotice(''); setSignalIntent('mark'); setWallOpen(nearestWall.id);
   };
   const publishWall = () => {
     const instance = wallEditor.current;
@@ -100,13 +105,15 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
     if (!image) { setWallNotice('Wait for the editor to load before publishing.'); return; }
     if (!instance.hasChanges()) { setWallNotice('Add text, a drawing or a sticker before leaving your mark.'); return; }
     setWallImages(images => ({ ...images, [wallOpen]: image }));
-    wallIncident.current = { x: playerMap.x, z: playerMap.z };
+    const surface = WALLS.find(wall => wall.id === wallOpen)!;
+    wallIncident.current = signalTarget(surface, signalIntent);
+    setStreetSignal({ sequence: ++reportSequence.current, origin: { x: surface.x - .6, z: surface.z }, target: wallIncident.current, intent: signalIntent, expires: elapsed + 25 });
     if (!crimeCommitted.current) {
       crimeCommitted.current = true; dispatched.current = false;
       recognized.current.clear(); detections.current.clear(); setWallAge(0);
     } else if (responseEnabled) setReport({ ...wallIncident.current, sequence: ++reportSequence.current });
     setWallOpen(null); setPaused(false);
-    setNotification({ icon: 'alert', title: 'MARK LEFT ON WALL', body: responseEnabled ? 'New mark reported. VMPD is already investigating.' : 'Your design is visible. Witnesses can report it. Move before dispatch responds.' });
+    setNotification({ icon: 'alert', title: signalIntent === 'mark' ? 'MARK LEFT ON WALL' : 'FALSE TRAIL PLANTED', body: signalIntent === 'mark' ? 'Your design is visible. Move before dispatch responds.' : 'Nearby readers follow your direction. Dispatch checks that lead after the delay, but direct sightings reveal your real position.' });
   };
   useEffect(() => {
     if (worldPaused || wallAge === null || responseEnabled) return;
@@ -284,7 +291,7 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
     detections.current.clear();
     graceRemaining.current = 0; contactSeconds.current = 0;
     setReport(null); setAwarenessReason('PATROL SEARCH');
-    setWallImages({}); setWallOpen(null); setWallAge(null); wallIncident.current = null;
+    setWallImages({}); setWallOpen(null); setWallAge(null); setStreetSignal(null); wallIncident.current = null;
     crimeCommitted.current = false; dispatched.current = false;
     setEscaped(false);
     controls.current = {};
@@ -307,13 +314,14 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
 
   return <main className="district-game"><div className="game-viewport-3d" style={{ '--district-accent': theme.accent } as React.CSSProperties} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp}>
     <div className="game-scene-layer">
-    <Canvas shadows dpr={[1, 1.5]} frameloop={paused || summary || posterOpen || wallOpen || pursuitPrompt || captured ? 'demand' : 'always'} camera={{ fov: 58, near: .1, far: 450, position: [.5, 3.2, 45] }} gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }} onCreated={({ gl }) => { gl.toneMapping = THREE.ACESFilmicToneMapping; gl.toneMappingExposure = 1.25; gl.outputColorSpace = THREE.SRGBColorSpace; }}><color attach="background" args={[theme.fog]} /><Suspense fallback={null}><NeonHarborScene onReady={sceneReady} key={runId} district={c.district} posterUrl={posterUrl} alias={c.alias} lifestyle={c.lifestyle} controls={controls} cameraYaw={cameraYaw} cameraPitch={cameraPitch} signals={{ elapsed, posterActive, billboardActive, paused: worldPaused, awareness, pursuitActive, report, responseEnabled, wallMarked: wallAge !== null, wallImages, wantedLevel: c.wantedLevel }} onNearPoster={setNearPoster} onPosition={onPosition} onMotion={onMotion} onRecognize={onRecognize} onPoliceDetect={onPoliceDetect} /></Suspense></Canvas>
+    <Canvas shadows dpr={[1, 1.5]} frameloop={paused || summary || posterOpen || wallOpen || pursuitPrompt || captured ? 'demand' : 'always'} camera={{ fov: 58, near: .1, far: 450, position: [.5, 3.2, 45] }} gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }} onCreated={({ gl }) => { gl.toneMapping = THREE.ACESFilmicToneMapping; gl.toneMappingExposure = 1.25; gl.outputColorSpace = THREE.SRGBColorSpace; }}><color attach="background" args={[theme.fog]} /><Suspense fallback={null}><NeonHarborScene onReady={sceneReady} key={runId} district={c.district} posterUrl={posterUrl} alias={c.alias} lifestyle={c.lifestyle} controls={controls} cameraYaw={cameraYaw} cameraPitch={cameraPitch} signals={{ elapsed, posterActive, billboardActive, paused: worldPaused, awareness, pursuitActive, report, responseEnabled, wallMarked: wallAge !== null, wallImages, streetSignal: streetSignal && elapsed < streetSignal.expires ? streetSignal : null, wantedLevel: c.wantedLevel }} onNearPoster={setNearPoster} onPosition={onPosition} onMotion={onMotion} onRecognize={onRecognize} onPoliceDetect={onPoliceDetect} /></Suspense></Canvas>
     </div>
     <div className="game-hud identity-hud"><img src={c.editedImage || c.originalImage} alt="Character identity" /><span><small>{c.district.toUpperCase()} // LIVE</small><b>{c.name} “{c.alias}”</b><em>{c.lifestyle.replace('-', ' ')}</em></span></div>
     <div className="game-hud stats-hud"><span>WANTED <b>{'★'.repeat(c.wantedLevel)}{'☆'.repeat(5 - c.wantedLevel)}</b></span><span>HEAT <b>{Math.min(100, c.heat + (policeReports ? 12 : 0))}</b></span><span>REP <b>{Math.min(100, c.reputation + recognitions * 2)}</b></span><span>BUZZ <b>{localBuzz}</b></span></div>
     <div className={`awareness-hud ${awareness >= 72 ? 'danger' : ''}`}><span>POLICE AWARENESS <b>{Math.round(awareness)}%</b></span><i><b style={{ width: `${awareness}%` }} /></i><small className="awareness-reason" role="status">{wallAge === null ? 'NO WALL INCIDENT / SUSPICION ONLY' : !responseEnabled ? `DISPATCH IN ${Math.ceil(WALL_REPORT_DELAY - wallAge)}s` : awarenessReason}</small></div>
     <div className={`motion-hud ${motionState.sprinting ? 'sprinting' : ''}`}><span><small>VELOCITY</small><b>{Math.round(motionState.speed * 3.6)} <em>KM/H</em></b></span><span><small>{motionState.grounded ? 'TRACTION' : 'AIRBORNE'}</small><i><b style={{ width: `${motionState.stamina}%` }} /></i><em>STAMINA {Math.round(motionState.stamina)}%</em></span></div>
     <div className={`objective-hud ${pursuitActive ? 'pursuit' : ''}`}><small>{pursuitActive ? 'ACTIVE PURSUIT' : 'CURRENT OBJECTIVE'}</small><b>{objective}</b><i className={!pursuitActive && objectiveComplete ? 'complete' : ''}>{pursuitActive ? `${escapeProgress}/5 SECONDS HIDDEN` : objectiveComplete ? 'OBJECTIVE COMPLETE' : wallAge === null ? 'Find a lit service wall. Press E to edit.' : !responseEnabled ? `${Math.ceil(WALL_REPORT_DELAY - wallAge)} SECONDS TO DISPATCH` : 'Break sight. Find a route away from patrols.'}</i></div>
+    {!worldPaused && !pursuitActive && <div className="surface-guide"><span style={{ transform: `rotate(${wallBearing}rad)` }} aria-hidden="true">↑</span><div><b>{nearestWall ? 'PRESS E / DRAW ON SURFACE' : `${wallDistance} m / EDITABLE SURFACE`}</b><small>{guideWall.name} · Cyan diamonds on map</small></div></div>}
     <motion.div key={`${notification.title}-${notification.body}`} className="game-notification" initial={{ x: 280, opacity: 0 }} animate={{ x: 0, opacity: 1 }}><NotificationIcon /><span><b>{notification.title}</b>{notification.body}</span></motion.div>
     {pursuitActive && !pursuitPrompt && !captured && <motion.div className="pursuit-strip" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><ShieldAlert /><span><b>VMPD SEARCH ACTIVE</b>Get below 55% awareness, then remain unseen for 5 seconds.</span><i><b style={{ width: `${escapeProgress * 20}%` }} /></i></motion.div>}
     <DistrictMinimap theme={theme} player={playerMap} posters={posterActive} patrol={policeCount > 0} />
@@ -323,6 +331,7 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
     {wallOpen && <section className="wall-editor-overlay" role="dialog" aria-modal="true" aria-label="Wall signal studio">
       <header><div><small>VICE COAST / STREET SIGNAL</small><h2>LEAVE YOUR MARK</h2></div><button className="secondary" onClick={() => { setWallOpen(null); setPaused(false); }}><X /> CANCEL</button></header>
       <p>Write a message, draw a symbol or add a sticker. Your exported design appears on this wall. The city is paused while you edit.</p>
+      <div className="signal-options"><label htmlFor="signal-intent">SIGNAL PURPOSE</label><select id="signal-intent" value={signalIntent} onChange={event => setSignalIntent(event.target.value as SignalIntent)}><option value="mark">Leave a message at this wall</option><option value="north">False trail: send readers north</option><option value="south">False trail: send readers south</option></select><p>Draw your own arrow or message using Unlayer React Image Editor. This choice controls the reaction; drawings are not automatically interpreted. Readers can follow a false trail for 25 seconds. Officers trust direct sightings over a sign.</p></div>
       <ViceImageEditor key={wallOpen} ref={wallEditor} image={wallSource} onReadyChange={setWallReady} onSave={() => setWallNotice('Canvas saved. Choose Publish on wall to apply your design.')} onCancel={() => { setWallOpen(null); setPaused(false); }} minHeight={520} />
       <footer><div><b>{wallAge === null ? '10 SECONDS TO MOVE' : responseEnabled ? 'VMPD IS ALREADY INVESTIGATING' : `${Math.ceil(WALL_REPORT_DELAY - wallAge)} SECONDS REMAIN`}</b><span>Your first publication starts the response timer. Further marks do not reset it. People can report you; police investigate after the delay.</span>{wallNotice && <p role="status">{wallNotice}</p>}</div><button className="primary coral-btn" disabled={!wallReady} onClick={publishWall}>{wallReady ? 'PUBLISH ON WALL' : 'LOADING EDITOR'}</button></footer>
     </section>}
