@@ -10,16 +10,27 @@ export interface ReportedLocation { x: number; z: number; sequence: number }
 export interface Point { x: number; z: number }
 
 // Rates are percentage points per second, independent of rendering frequency.
-export function officerDetection(distance: number, facing: number, clear: boolean, searching: boolean, heightDifference = 0): PoliceDetection {
-  const visible = clear && heightDifference < 3 && distance <= (searching ? 30 : 24)
-    && (distance <= 5 || facing >= (searching ? -.25 : .15));
+// A crouching target breaks up their outline: they are spotted later and
+// identified more slowly, but standing on top of an officer still gives it away.
+export function officerDetection(distance: number, facing: number, clear: boolean, searching: boolean, heightDifference = 0, crouching = false): PoliceDetection {
+  const range = (searching ? 30 : 24) * (crouching ? .62 : 1);
+  const visible = clear && heightDifference < 3 && distance <= range
+    && (distance <= (crouching ? 3 : 5) || facing >= (searching ? -.25 : .15));
+  const rate = !visible ? 0 : distance <= 2.5 ? 65 : distance <= 5 ? 38 : distance <= 12 ? 20 : 10;
   return { visible, distance, source: 'officer', contact: visible && distance <= 1.35 && heightDifference < 1,
-    rate: !visible ? 0 : distance <= 2.5 ? 65 : distance <= 5 ? 38 : distance <= 12 ? 20 : 10 };
+    rate: rate * (crouching ? .6 : 1) };
 }
 
 export function advanceAwareness(value: number, detections: PoliceDetection[], seconds: number, pursuit: boolean) {
   const rate = Math.max(0, ...detections.filter(d => d.visible).map(d => d.rate));
   return Math.max(0, Math.min(100, value + (rate || (pursuit ? -10 : -3)) * seconds));
+}
+
+// VMPD is in response mode once a wall incident has been dispatched, or the
+// instant a shot is fired. Gunfire does not wait on a graffiti clock, and
+// without this the whole force stays frozen while awareness sits at 100.
+export function responseActive(wallDispatched: boolean, shotsFired: number) {
+  return wallDispatched || shotsFired > 0;
 }
 
 export function policeSpeed(awareness: number, pursuit: boolean) {

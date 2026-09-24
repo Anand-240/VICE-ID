@@ -10,3 +10,13 @@ export function autoBoost(awareness: number, pursuit: boolean) {
 export function playerSpeed(pursuit: boolean, sprinting: boolean) {
   return pursuit ? ESCAPE_SPEED : sprinting ? SPRINT_SPEED : WALK_SPEED;
 }
+
+export const CROUCH_SPEED = 1.95;
+export const AIM_FACTOR = .42;
+
+// One place decides how fast the character may travel, so crouch, aim, sprint
+// and the automatic escape boost cannot disagree with each other.
+export function moveSpeed(options: { pursuit: boolean; sprinting: boolean; aiming?: boolean; crouching?: boolean }) {
+  if (options.crouching) return CROUCH_SPEED;
+  return playerSpeed(options.pursuit, options.sprinting) * (options.aiming ? AIM_FACTOR : 1);
+}

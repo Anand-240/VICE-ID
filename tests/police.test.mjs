@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { advanceAwareness, officerDetection, policeSpeed, findPolicePath } from '../src/game/police.ts';
+import { advanceAwareness, officerDetection, policeSpeed, findPolicePath, responseActive } from '../src/game/police.ts';
 
 test('standing beside an officer is detected from behind and quickly confirms identity', () => {
   const close = officerDetection(2, -1, true, false);
@@ -51,4 +51,28 @@ test('navigation routes around a solid obstacle and does not cross its corners',
   let previous = start;
   for (const point of path) { assert.ok(clear(previous, point)); previous = point; }
   assert.deepEqual(findPolicePath(start, goal, () => false), []);
+});
+
+test('crouching shortens the range you are spotted at and slows identification', () => {
+  const standing = officerDetection(20, 1, true, false);
+  const crouched = officerDetection(20, 1, true, false, 0, true);
+  assert.equal(standing.visible, true);
+  assert.equal(crouched.visible, false, 'the same distance is outside their crouched spotting range');
+  // Inside range, a crouched target is still identified, just more slowly.
+  const near = officerDetection(8, 1, true, false, 0, true);
+  assert.equal(near.visible, true);
+  assert.ok(near.rate < officerDetection(8, 1, true, false).rate);
+  // Standing on top of an officer gives you away either way.
+  assert.equal(officerDetection(1.2, -1, true, false, 0, true).contact, true);
+});
+
+test('gunfire puts VMPD in response mode without waiting on the wall clock', () => {
+  // No graffiti dispatched and no shots: the street is only suspicious.
+  assert.equal(responseActive(false, 0), false);
+  // A dispatched wall incident is the original trigger.
+  assert.equal(responseActive(true, 0), true);
+  // One shot is enough on its own. Without this the force stays frozen while
+  // awareness sits at 100, because every officer frame is gated on this flag.
+  assert.equal(responseActive(false, 1), true);
+  assert.equal(responseActive(true, 3), true);
 });

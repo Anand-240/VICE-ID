@@ -108,3 +108,57 @@
 @keyframes wallLive{to{box-shadow:0 0 22px rgba(126,240,255,.75)}}
 @media(max-width:900px){.wall-studio{top:auto;left:0;width:auto;height:62vh;border-left:0;border-top:1px solid #52d7e855;box-shadow:0 -18px 50px rgba(0,0,0,.6)}.wall-studio>p{display:none}.wall-studio>header .secondary{min-width:110px;font-size:10px}}
 @media(prefers-reduced-motion:reduce){.wall-world-label.live{animation:none}}
+
+/* Sidearm: draw, aim, fire. */
+.weapon-dock{position:absolute;z-index:31;right:18px;bottom:190px;width:212px;border:1px solid rgba(255,116,102,.45);border-radius:5px;background:linear-gradient(150deg,rgba(24,12,14,.95),rgba(14,18,28,.94));box-shadow:0 12px 34px rgba(0,0,0,.45);backdrop-filter:blur(8px);overflow:hidden}
+.weapon-dock.drawn{border-color:#ff7466}
+.weapon-toggle{display:grid;grid-template-columns:16px 1fr auto;align-items:center;gap:8px;width:100%;padding:10px 11px;background:rgba(255,116,102,.16);border:0;border-bottom:1px solid rgba(255,116,102,.3);color:#ffd9d2;cursor:pointer;text-align:left}
+.weapon-dock.drawn .weapon-toggle{background:#ff7466;color:#1a0b09}
+.weapon-toggle svg{width:15px;height:15px}
+.weapon-toggle b{font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.08em}
+.weapon-toggle small{font:8px 'IBM Plex Mono',monospace;opacity:.75}
+.weapon-readout{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:9px}
+.weapon-readout>span{display:grid;gap:3px;padding:7px 9px;border:1px solid #3d2a2c;border-radius:3px;background:rgba(22,16,20,.85)}
+.weapon-readout small{font:8px 'IBM Plex Mono',monospace;color:#b09a9a;letter-spacing:.09em}
+.weapon-readout>span>b{font:600 14px 'IBM Plex Mono',monospace;color:#f3e6e2}
+.weapon-readout>span>b em{font-size:9px;color:#9e8a8a;font-style:normal}
+.weapon-readout>span>b.hot{color:#ff7466}
+.weapon-readout button{grid-column:1/-1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border:1px solid #58393b;border-radius:3px;background:rgba(28,18,22,.9);color:#f4e7d3;font:600 9px 'IBM Plex Mono',monospace;letter-spacing:.08em;cursor:pointer}
+.weapon-readout button svg{width:13px}
+.weapon-readout button small{font-size:7px;color:#a08e8e;letter-spacing:.06em}
+.weapon-readout button:disabled{opacity:.38;cursor:default}
+.weapon-readout .weapon-aim[aria-pressed=true]{border-color:#ff7466;color:#ffd9d2;background:rgba(255,116,102,.18)}
+.weapon-readout .weapon-fire{border-color:#ff7466;color:#ffd9d2}
+.aim-reticle{position:absolute;z-index:29;left:50%;top:50%;width:34px;height:34px;transform:translate(-50%,-50%);pointer-events:none}
+.aim-reticle i{position:absolute;background:#ff7466;box-shadow:0 0 6px rgba(255,116,102,.8)}
+.aim-reticle i:nth-child(1),.aim-reticle i:nth-child(2){left:50%;width:2px;height:11px;margin-left:-1px}
+.aim-reticle i:nth-child(1){top:0}.aim-reticle i:nth-child(2){bottom:0}
+.aim-reticle i:nth-child(3),.aim-reticle i:nth-child(4){top:50%;height:2px;width:11px;margin-top:-1px}
+.aim-reticle i:nth-child(3){left:0}.aim-reticle i:nth-child(4){right:0}
+.studio-dock-body .dock-free{border-style:dashed;opacity:.72}
+.studio-dock-body .dock-free.ready{border-style:solid;border-color:#52d7e8;opacity:1;box-shadow:inset 2px 0 0 #52d7e8}
+.studio-dock-body .dock-free:disabled{cursor:default}
+.mobile-aim,.mobile-fire{display:none}
+@media(max-width:1100px){.weapon-dock{bottom:238px}}
+@media(max-width:900px){.weapon-dock{right:10px;bottom:300px;width:184px}.mobile-aim,.mobile-fire{width:62px;height:62px;border-radius:50%;border:1px solid #ff7466;background:rgba(18,9,11,.82);color:#f4e7d3;font:6px 'IBM Plex Mono',monospace;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}.mobile-aim svg,.mobile-fire svg{width:15px}.mobile-aim[aria-pressed=true]{background:#ff7466;color:#1a0b09}.mobile-aim:disabled,.mobile-fire:disabled{opacity:.32}}
+@media(max-width:650px){.weapon-dock{width:158px;bottom:352px}.weapon-readout{grid-template-columns:1fr}.mobile-aim,.mobile-fire{width:52px;height:52px}}
+
+/* Taking fire. */
+.health-hud{position:absolute;z-index:22;left:18px;top:212px;width:230px;padding:11px 12px;border-radius:4px;background:linear-gradient(135deg,rgba(28,10,14,.94),rgba(17,27,42,.9));border:1px solid rgba(255,116,102,.42);pointer-events:none;backdrop-filter:blur(8px)}
+.health-hud span{display:flex;justify-content:space-between;align-items:baseline;font:9px 'IBM Plex Mono',monospace;color:#c4a7a7;letter-spacing:.09em}
+.health-hud span b{font-size:15px;color:#f4e7d3}
+.health-hud i{display:block;height:4px;background:#39232a;margin:8px 0 6px;overflow:hidden}
+.health-hud i b{display:block;height:100%;background:linear-gradient(90deg,#ff7466,#ffb27a);transition:width .25s}
+.health-hud>small{font:8px 'IBM Plex Mono',monospace;color:#ff9c90;letter-spacing:.08em}
+.health-hud.critical{animation:healthCritical .7s ease-in-out infinite alternate}
+.health-hud.critical i b{background:#ff3d4f}
+@keyframes healthCritical{to{border-color:rgba(255,61,79,.85);box-shadow:0 0 30px rgba(255,36,59,.3)}}
+.incoming-fire{position:absolute;z-index:26;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 50%,transparent 35%,rgba(255,40,56,.5) 100%)}
+.npc-tag.police.armed{border-bottom-color:#ff3d4f;color:#ffd3cf;box-shadow:0 0 12px rgba(255,61,79,.5)}
+@media(max-width:1100px){.health-hud{top:196px}}
+@media(max-width:900px){.health-hud{left:10px;top:186px;width:206px}}
+@media(max-width:620px){.health-hud{left:10px;right:10px;width:auto;top:290px}}
+@media(prefers-reduced-motion:reduce){.health-hud.critical{animation:none}}
+.mobile-crouch{display:none}
+@media(max-width:900px){.mobile-crouch{width:62px;height:62px;border-radius:50%;border:1px solid #9fb2c4;background:rgba(8,11,18,.78);color:#f4e7d3;font:6px 'IBM Plex Mono',monospace;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}.mobile-crouch svg{width:15px}}
+@media(max-width:650px){.mobile-crouch{width:52px;height:52px}}

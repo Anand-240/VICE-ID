@@ -1,12 +1,15 @@
-import { autoBoost, playerSpeed } from './movement';
+import { autoBoost, moveSpeed } from './movement';
+import { approachVelocity, isStep, consumeJump, cutJump, JUMP_SPEED, RESTING_JUMP, shouldJump, STEP_HEIGHT, tickJump, turnToward, type JumpState } from './locomotion';
 import { Html, Sky, useTexture } from '@react-three/drei';
 import { CuboidCollider, CapsuleCollider, Physics, RigidBody, useRapier, type RapierRigidBody } from '@react-three/rapier';
 import { useFrame, useThree } from '@react-three/fiber';
-import { createContext, useContext, memo, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
+import { createContext, useContext, memo, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import * as THREE from 'three';
 import { getDistrictTheme, type DistrictTheme } from './districts';
 import { findPolicePath, officerDetection, policeSpeed, type PoliceDetection, type ReportedLocation, type Point } from './police';
 import { WALLS, makeWallCanvas, type WallId, type StreetSignal } from './walls';
+import { makeTagCanvas, TAG_HEIGHT, TAG_RANGE, TAG_WIDTH, type FocusTarget, type SurfaceHit, type Tag } from './tags';
+import { PANIC_DURATION, aimElevation, AIM_FOV, AIM_HEIGHT, AIM_PULLBACK, AIM_SHOULDER, DOWN_DURATION, POLICE_FIRE_INTERVAL, POLICE_HOLD_RANGE, POLICE_RANGE, policeShotHits, resolveShot, type ShotTarget, type WeaponState } from './weapon';
 
 export type ControlState = Record<string, boolean>;
 
@@ -15,6 +18,7 @@ export interface MotionTelemetry {
   stamina: number;
   grounded: boolean;
   sprinting: boolean;
+  crouching: boolean;
 }
 
 export interface SceneSignals {
@@ -22,21 +26,39 @@ export interface SceneSignals {
   posterActive: boolean;
   billboardActive: boolean;
   paused: boolean;
-  awareness: number;
   wantedLevel: number;
   pursuitActive: boolean;
   report: ReportedLocation | null;
   responseEnabled: boolean;
   wallMarked: boolean;
-  wallImages: Partial<Record<WallId, string>>;
+  // Keyed by wall id or tag id: every paintable surface in the district.
+  surfaceImages: Record<string, string>;
   streetSignal: StreetSignal | null;
-  // The wall currently open in the editor, framed by the camera and repainted
-  // on every export while the player draws.
-  focusWall: WallId | null;
-  targetWall: WallId | null;
+  // The surface currently open in the editor, framed by the camera and
+  // repainted on every export while the player draws.
+  // Set once VMPD has been told a weapon is out: units return fire on sight.
+  armedResponse: boolean;
+  focusSurface: string | null;
+  focusPoint: FocusTarget | null;
+  targetSurface: string | null;
+  tags: Tag[];
+}
+
+// Values that change many times a second travel by ref, never as props: a
+// prop change would reconcile the whole district on every awareness tick.
+export interface LiveSignals {
+  awareness: number;
+  weapon: WeaponState;
+  playerMoving: boolean;
+  playerCrouching: boolean;
+  fireToken: number;
 }
 
 interface SceneProps {
+  live: MutableRefObject<LiveSignals>;
+  onAimSurface: (hit: SurfaceHit | null) => void;
+  onShot: (result: { target: string | null; kind: 'officer' | 'civilian' | null }) => void;
+  onPoliceFire: (result: { officer: string; hit: boolean; distance: number }) => void;
   posterUrl: string;
   district: string;
   alias: string;
@@ -70,11 +92,13 @@ const NPCS = [
 ] as const;
 
 const q = new THREE.Quaternion();
+const UP = new THREE.Vector3(0, 1, 0);
+const POLICE_SPAWNS: [number, number, number][] = [[8, 0, 46], [7, 0, 33], [-7, 0, 14], [6, 0, -20]];
 const e = new THREE.Euler();
 
 const BlockersContext = createContext<Map<string, Box2D>>(new Map());
 
-const Humanoid = memo(function Humanoid({ color, skin = '#b9785d', police = false, variant = 0, moving, pace }: { color: string; skin?: string; police?: boolean; variant?: number; moving?: MutableRefObject<boolean>; pace?: MutableRefObject<number> }) {
+const Humanoid = memo(function Humanoid({ color, skin = '#b9785d', police = false, variant = 0, moving, pace, aim, handItem }: { color: string; skin?: string; police?: boolean; variant?: number; moving?: MutableRefObject<boolean>; pace?: MutableRefObject<number>; aim?: MutableRefObject<boolean>; handItem?: ReactNode }) {
   const limbs = useRef<(THREE.Group | null)[]>([]);
   const knees = useRef<(THREE.Group | null)[]>([]);
   const torso = useRef<THREE.Group>(null);
@@ -86,8 +110,15 @@ const Humanoid = memo(function Humanoid({ color, skin = '#b9785d', police = fals
     const dt = Math.min(delta, .05);
     if (active) phase.current += dt * (running ? 11.5 : 6.5);
     const swing = active ? Math.sin(phase.current) * (running ? .85 : .48) : 0;
+    const aiming = aim?.current ?? false;
     limbs.current.forEach((limb, i) => {
-      if (limb) limb.rotation.x = THREE.MathUtils.damp(limb.rotation.x, swing * (i % 2 ? -1 : 1) * (i < 2 ? -1 : 1), 14, dt);
+      if (!limb) return;
+      const arm = i < 2;
+      // Both arms come up into a two handed grip while aiming, so the weapon
+      // is held rather than floating beside the body.
+      limb.rotation.x = THREE.MathUtils.damp(limb.rotation.x,
+        arm && aiming ? -1.42 : swing * (i % 2 ? -1 : 1) * (arm ? -1 : 1), arm && aiming ? 15 : 14, dt);
+      if (arm) limb.rotation.z = THREE.MathUtils.damp(limb.rotation.z, aiming ? (i === 0 ? .2 : -.34) : 0, 15, dt);
     });
     knees.current.forEach((knee, i) => {
       if (knee) knee.rotation.x = THREE.MathUtils.damp(knee.rotation.x, active ? Math.max(0, Math.sin(phase.current + i * Math.PI)) * (running ? 1.1 : .55) : .03, 14, dt);
@@ -109,6 +140,7 @@ const Humanoid = memo(function Humanoid({ color, skin = '#b9785d', police = fals
         <group position={[0, -.28, 0]} rotation={[-.22, 0, 0]}>
           <mesh castShadow position={[0, -.105, 0]}><capsuleGeometry args={[.059, .14, 4, 8]} /><meshStandardMaterial color={color} roughness={.9} /></mesh>
           <mesh castShadow position={[0, -.24, 0]}><sphereGeometry args={[.065, 8, 8]} /><meshStandardMaterial color={skin} /></mesh>
+          {i === 0 && handItem}
         </group>
       </group>)}
       {police && <><mesh position={[0, .25, .16]}><boxGeometry args={[.4, .32, .08]} /><meshStandardMaterial color="#132132" roughness={.95} /></mesh><mesh position={[-.11, .31, .207]}><boxGeometry args={[.065, .07, .015]} /><meshStandardMaterial color="#e3c678" metalness={.7} roughness={.35} /></mesh><mesh position={[0, .84, .03]}><cylinderGeometry args={[.19, .19, .07, 12]} /><meshStandardMaterial color="#192738" /></mesh><mesh position={[0, .82, .17]}><boxGeometry args={[.26, .025, .15]} /><meshStandardMaterial color="#192738" /></mesh></>}
@@ -125,9 +157,9 @@ const Humanoid = memo(function Humanoid({ color, skin = '#b9785d', police = fals
   </group>;
 });
 
-function Player({ pursuit, focus, controls, cameraYaw, cameraPitch, paused, playerPosition, onNearPoster, onPosition, onMotion, spawn }: Pick<SceneProps, 'controls' | 'cameraYaw' | 'cameraPitch' | 'onNearPoster' | 'onPosition' | 'onMotion'> & { pursuit: boolean; focus: Point | null; paused: boolean; playerPosition: MutableRefObject<THREE.Vector3>; spawn: [number, number] }) {
+function Player({ pursuitActive, live, focus, bodyRef, onAimSurface, controls, cameraYaw, cameraPitch, paused, playerPosition, onNearPoster, onPosition, onMotion, spawn }: Pick<SceneProps, 'controls' | 'cameraYaw' | 'cameraPitch' | 'onNearPoster' | 'onPosition' | 'onMotion' | 'onAimSurface'> & { pursuitActive: boolean; live: MutableRefObject<LiveSignals>; focus: FocusTarget | null; bodyRef: MutableRefObject<RapierRigidBody | null>; paused: boolean; playerPosition: MutableRefObject<THREE.Vector3>; spawn: [number, number] }) {
   const blockers = useContext(BlockersContext);
-  const body = useRef<RapierRigidBody>(null);
+  const body = bodyRef;
   const model = useRef<THREE.Group>(null);
   const { camera } = useThree();
   const { world, rapier } = useRapier();
@@ -136,18 +168,37 @@ function Player({ pursuit, focus, controls, cameraYaw, cameraPitch, paused, play
   const movingRef = useRef(false);
   const playerPace = useRef(0);
   const initialHeading = useRef(cameraYaw.current + Math.PI);
-  const jumpHeld = useRef(false);
+  const jump = useRef<JumpState>(RESTING_JUMP);
   const sprintExhausted = useRef(false);
   const stamina = useRef(100);
   const targetCamera = useMemo(() => new THREE.Vector3(), []);
   const targetLook = useMemo(() => new THREE.Vector3(), []);
   const cameraOrigin = useMemo(() => new THREE.Vector3(), []);
   const cameraDirection = useMemo(() => new THREE.Vector3(), []);
+  const aimVector = useMemo(() => new THREE.Vector3(), []);
+  const rightVector = useMemo(() => new THREE.Vector3(), []);
+  const surfaceClock = useRef(0);
+  const aimedSurface = useRef<string>('');
+  const pistol = useRef<THREE.Group>(null);
+  const flash = useRef<THREE.Mesh>(null);
+  const flashUntil = useRef(0);
+  const shotSeen = useRef(0);
+  const aimPose = useRef(false);
+  // Built once: the hand socket carries it, so nothing here changes per frame.
+  const sidearm = useMemo(() => <group ref={pistol} position={[0, -.26, -.02]} rotation={[-1.32, 0, 0]} visible={false}>
+    <mesh castShadow position={[0, .05, .03]}><boxGeometry args={[.08, .12, .38]} /><meshStandardMaterial color="#39404d" metalness={.75} roughness={.28} /></mesh>
+    <mesh castShadow position={[0, -.08, -.07]} rotation={[.4, 0, 0]}><boxGeometry args={[.07, .18, .11]} /><meshStandardMaterial color="#1d222b" metalness={.4} roughness={.6} /></mesh>
+    <mesh position={[0, .11, .08]}><boxGeometry args={[.045, .035, .28]} /><meshStandardMaterial color="#8d9aac" metalness={.85} roughness={.2} emissive="#2a3442" emissiveIntensity={.25} /></mesh>
+    <mesh ref={flash} position={[0, .06, .29]} visible={false}><sphereGeometry args={[.15, 8, 8]} /><meshBasicMaterial color="#ffdfa8" transparent opacity={.95} toneMapped={false} /></mesh>
+    <pointLight position={[0, .06, .31]} color="#ffca86" intensity={.7} distance={2.2} />
+  </group>, []);
 
   useFrame((_, delta) => {
     const rb = body.current;
     if (!rb) return;
     if (paused) { movingRef.current = false; return; }
+    const { awareness, weapon, fireToken } = live.current;
+    const pursuit = autoBoost(awareness, pursuitActive);
     const pos = rb.translation();
     if (pos.y < -3) { rb.setTranslation({ x: spawn[0], y: .84, z: spawn[1] }, true); rb.setLinvel({ x: 0, y: 0, z: 0 }, true); stamina.current = 100; return; }
     playerPosition.current.set(pos.x, pos.y, pos.z);
@@ -165,40 +216,66 @@ function Player({ pursuit, focus, controls, cameraYaw, cameraPitch, paused, play
     const moving = x !== 0 || z !== 0;
     if (stamina.current <= .5) sprintExhausted.current = true;
     if (stamina.current >= 25) sprintExhausted.current = false;
-    const wantsSprint = moving && grounded && (pursuit || (controls.current.shift && !sprintExhausted.current));
+    const aiming = weapon.drawn && weapon.aiming;
+    if (fireToken !== shotSeen.current) { shotSeen.current = fireToken; flashUntil.current = performance.now() + 70; }
+    if (pistol.current) {
+      pistol.current.visible = weapon.drawn;
+      // Only the recoil kick is animated here; the hand carries the rest.
+      const kick = Math.max(0, (flashUntil.current - performance.now()) / 70);
+      pistol.current.rotation.x = THREE.MathUtils.damp(pistol.current.rotation.x, -1.32, 18, delta) - kick * .34;
+      pistol.current.position.z = THREE.MathUtils.damp(pistol.current.position.z, -.02, 18, delta) + kick * .05;
+    }
+    aimPose.current = aiming;
+    if (flash.current) flash.current.visible = weapon.drawn && performance.now() < flashUntil.current;
+    const crouching = Boolean(controls.current.c) && grounded;
+    const wantsSprint = moving && grounded && !aiming && !crouching && (pursuit || (controls.current.shift && !sprintExhausted.current));
     stamina.current = THREE.MathUtils.clamp(stamina.current + delta * (pursuit ? 12 : wantsSprint ? -17 : grounded ? 12 : 7), 0, 100);
     const sprinting = wantsSprint && (pursuit || stamina.current > 0);
     let targetX = 0;
     let targetZ = 0;
+    let heading = model.current?.rotation.y ?? 0;
     if (moving) {
       const length = Math.hypot(x, z);
       x /= length; z /= length;
       const yaw = cameraYaw.current;
-      const forwardX = -Math.sin(yaw);
-      const forwardZ = -Math.cos(yaw);
-      const rightX = Math.cos(yaw);
-      const rightZ = -Math.sin(yaw);
-      const moveX = forwardX * z + rightX * x;
-      const moveZ = forwardZ * z + rightZ * x;
-      const speed = playerSpeed(pursuit, sprinting);
+      const moveX = -Math.sin(yaw) * z + Math.cos(yaw) * x;
+      const moveZ = -Math.cos(yaw) * z - Math.sin(yaw) * x;
+      const speed = moveSpeed({ pursuit, sprinting, aiming, crouching });
       targetX = moveX * speed;
       targetZ = moveZ * speed;
-      if (model.current) {
-        const angle = Math.atan2(moveX, moveZ);
-        e.set(0, angle, 0); q.setFromEuler(e);
-        model.current.quaternion.slerp(q, 1 - Math.exp(-delta * 12));
-        model.current.position.y = -.8 + (grounded ? Math.abs(Math.sin(performance.now() * (sprinting ? .013 : .009))) * .025 : 0);
-      }
-    } else if (model.current) model.current.position.y = THREE.MathUtils.damp(model.current.position.y, -.8, 12, delta);
+      heading = aiming ? cameraYaw.current + Math.PI : Math.atan2(moveX, moveZ);
+    } else if (aiming) heading = cameraYaw.current + Math.PI;
+    if (model.current) {
+      model.current.rotation.y = turnToward(model.current.rotation.y, heading, delta);
+      // Gait bob scales with how fast the character is actually travelling.
+      const bob = grounded && movingRef.current ? Math.abs(Math.sin(performance.now() * (sprinting ? .013 : .009))) * .025 : 0;
+      model.current.position.y = THREE.MathUtils.damp(model.current.position.y, (crouching ? -1.1 : -.8) + bob, 14, delta);
+      model.current.scale.setScalar(THREE.MathUtils.damp(model.current.scale.x, crouching ? .86 : 1, 12, delta));
+    }
+    const { x: nextX, z: nextZ } = approachVelocity(current, { x: targetX, z: targetZ }, grounded, delta);
 
-    const responsiveness = grounded ? (moving ? 10 : 15) : (moving ? 2.2 : .8);
-    const blend = 1 - Math.exp(-responsiveness * delta);
-    const nextX = THREE.MathUtils.lerp(current.x, targetX, blend);
-    const nextZ = THREE.MathUtils.lerp(current.z, targetZ, blend);
-    const jumpPressed = Boolean(controls.current[' ']);
-    const jumpNow = jumpPressed && !jumpHeld.current && grounded && !paused;
-    jumpHeld.current = jumpPressed;
-    rb.setLinvel({ x: nextX, y: jumpNow ? 5.1 : current.y, z: nextZ }, true);
+    // Walk over kerbs and low steps instead of stalling against them. Only
+    // probed when actually being held up, otherwise the nudge fires every frame
+    // and shakes the camera.
+    const wanted = Math.hypot(targetX, targetZ);
+    const blockedUp = grounded && moving && wanted > .6 && Math.hypot(current.x, current.z) < wanted * .55;
+    if (blockedUp) {
+      const ahead = { x: nextX, y: 0, z: nextZ };
+      const length = Math.hypot(ahead.x, ahead.z);
+      ahead.x /= length; ahead.z /= length;
+      const reach = .62;
+      const foot = world.castRay(new rapier.Ray({ x: pos.x, y: pos.y - .68, z: pos.z }, ahead), reach, true, undefined, undefined, undefined, rb);
+      const step = world.castRay(new rapier.Ray({ x: pos.x, y: pos.y - .68 + STEP_HEIGHT + .12, z: pos.z }, ahead), reach, true, undefined, undefined, undefined, rb);
+      if (isStep(foot ? foot.timeOfImpact : null, step ? step.timeOfImpact : null, reach)) {
+        rb.setTranslation({ x: pos.x, y: pos.y + Math.min(STEP_HEIGHT, 7 * delta), z: pos.z }, true);
+      }
+    }
+
+    const pressed = Boolean(controls.current[' ']) && !paused;
+    jump.current = tickJump(jump.current, grounded, pressed, delta);
+    let velocityY = cutJump(current.y, jump.current.held);
+    if (shouldJump(jump.current)) { velocityY = JUMP_SPEED; jump.current = consumeJump(jump.current); }
+    rb.setLinvel({ x: nextX, y: velocityY, z: nextZ }, true);
     const planarSpeed = Math.hypot(nextX, nextZ);
     playerPace.current = planarSpeed;
     movingRef.current = planarSpeed > .18 && grounded;
@@ -209,19 +286,79 @@ function Player({ pursuit, focus, controls, cameraYaw, cameraPitch, paused, play
       const lens = camera instanceof THREE.PerspectiveCamera ? camera : null;
       const halfTan = lens ? Math.tan(THREE.MathUtils.degToRad(lens.fov / 2)) : .55;
       const wide = (lens?.aspect ?? 1.6) > 1.3;
-      const standOff = 7.2;
+      const standOff = focus.standOff;
       const lateral = wide ? .5 * halfTan * (lens?.aspect ?? 1.6) * standOff : 0;
       const lift = wide ? 0 : .46 * halfTan * standOff;
-      targetCamera.set(focus.x - standOff, 1.9 + lift, focus.z + lateral);
+      // Look along the surface normal, then slide sideways so the panel does
+      // not cover the part of the surface being repainted.
+      aimVector.set(focus.nx, 0, focus.nz);
+      if (aimVector.lengthSq() < .0001) aimVector.set(-1, 0, 0);
+      aimVector.normalize();
+      rightVector.set(0, 1, 0).cross(aimVector).normalize();
+      targetLook.set(focus.x, focus.y + lift * .6, focus.z).addScaledVector(rightVector, lateral);
+      targetCamera.copy(targetLook).addScaledVector(aimVector, standOff).setY(focus.y + .25 + lift);
       camera.position.lerp(targetCamera, 1 - Math.exp(-delta * 5));
-      targetLook.set(focus.x, 1.75 + lift, focus.z + lateral);
       camera.lookAt(targetLook);
       if (lens) { const nextFov = THREE.MathUtils.damp(lens.fov, 58, 5, delta); if (Math.abs(nextFov - lens.fov) > .01) { lens.fov = nextFov; lens.updateProjectionMatrix(); } }
       syncClock.current += delta;
       if (syncClock.current > .12) {
         syncClock.current = 0;
         onPosition(pos.x, pos.z, model.current?.rotation.y || 0);
-        onMotion({ speed: planarSpeed, stamina: stamina.current, grounded, sprinting });
+        onMotion({ speed: planarSpeed, stamina: stamina.current, grounded, sprinting, crouching });
+      }
+      return;
+    }
+
+    surfaceClock.current += delta;
+    if (surfaceClock.current > .16) {
+      surfaceClock.current = 0;
+      // What is the player standing in front of? Anything upright within reach
+      // can take paint, not just the prepared walls.
+      cameraDirection.set(-Math.sin(cameraYaw.current), -Math.sin(cameraPitch.current) * .6, -Math.cos(cameraYaw.current)).normalize();
+      cameraOrigin.set(pos.x, pos.y + .35, pos.z);
+      const probe = world.castRayAndGetNormal(new rapier.Ray(cameraOrigin, cameraDirection), TAG_RANGE, true, undefined, undefined, undefined, rb);
+      const hit = probe ? {
+        x: cameraOrigin.x + cameraDirection.x * probe.timeOfImpact,
+        y: cameraOrigin.y + cameraDirection.y * probe.timeOfImpact,
+        z: cameraOrigin.z + cameraDirection.z * probe.timeOfImpact,
+        nx: probe.normal.x, ny: probe.normal.y, nz: probe.normal.z,
+        distance: probe.timeOfImpact,
+      } : null;
+      const key = hit ? `${hit.x.toFixed(1)},${hit.y.toFixed(1)},${hit.z.toFixed(1)}` : '';
+      if (key !== aimedSurface.current) { aimedSurface.current = key; onAimSurface(hit); }
+    }
+
+    if (aiming) {
+      // Sight down the aim line from over the shoulder. Looking AT the player
+      // would put the reticle on his own head and send every shot into his back.
+      const elevation = aimElevation(cameraPitch.current);
+      aimVector.set(-Math.sin(cameraYaw.current), 0, -Math.cos(cameraYaw.current)).normalize();
+      rightVector.copy(aimVector).cross(UP).normalize();
+      targetCamera.set(pos.x, pos.y + AIM_HEIGHT, pos.z)
+        .addScaledVector(rightVector, AIM_SHOULDER)
+        .addScaledVector(aimVector, -AIM_PULLBACK);
+      cameraOrigin.set(pos.x, pos.y + AIM_HEIGHT, pos.z);
+      cameraDirection.copy(targetCamera).sub(cameraOrigin);
+      const back = cameraDirection.length();
+      if (back > .01) {
+        cameraDirection.normalize();
+        const blocked = world.castRay(new rapier.Ray(cameraOrigin, cameraDirection), back, true, undefined, undefined, undefined, rb);
+        if (blocked) targetCamera.copy(cameraOrigin).addScaledVector(cameraDirection, Math.max(.4, blocked.timeOfImpact - .2));
+      }
+      camera.position.lerp(targetCamera, 1 - Math.exp(-delta * 16));
+      targetLook.copy(camera.position)
+        .addScaledVector(aimVector, Math.cos(elevation) * 45)
+        .addScaledVector(UP, Math.sin(elevation) * 45);
+      camera.lookAt(targetLook);
+      if (camera instanceof THREE.PerspectiveCamera) {
+        const nextFov = THREE.MathUtils.damp(camera.fov, AIM_FOV, 8, delta);
+        if (Math.abs(nextFov - camera.fov) > .01) { camera.fov = nextFov; camera.updateProjectionMatrix(); }
+      }
+      syncClock.current += delta;
+      if (syncClock.current > .12) {
+        syncClock.current = 0;
+        onPosition(pos.x, pos.z, model.current?.rotation.y || 0);
+        onMotion({ speed: planarSpeed, stamina: stamina.current, grounded, sprinting, crouching });
       }
       return;
     }
@@ -235,7 +372,7 @@ function Player({ pursuit, focus, controls, cameraYaw, cameraPitch, paused, play
     if (Array.from(blockers.values()).some((box) => targetCamera.x > box.x - box.w / 2 && targetCamera.x < box.x + box.w / 2 && targetCamera.z > box.z - box.d / 2 && targetCamera.z < box.z + box.d / 2)) {
       targetCamera.lerp(new THREE.Vector3(pos.x, pos.y + 1.8, pos.z), .55);
     }
-    cameraOrigin.set(pos.x, pos.y + .92, pos.z);
+    cameraOrigin.set(pos.x, pos.y + (crouching ? .62 : .92), pos.z);
     cameraDirection.copy(targetCamera).sub(cameraOrigin);
     const cameraDistance = cameraDirection.length();
     if (cameraDistance > .01) {
@@ -243,11 +380,14 @@ function Player({ pursuit, focus, controls, cameraYaw, cameraPitch, paused, play
       const cameraHit = world.castRay(new rapier.Ray(cameraOrigin, cameraDirection), cameraDistance, true, undefined, undefined, undefined, rb);
       if (cameraHit) targetCamera.copy(cameraOrigin).addScaledVector(cameraDirection, Math.max(.55, cameraHit.timeOfImpact - .24));
     }
-    camera.position.lerp(targetCamera, 1 - Math.exp(-delta * 7));
-    targetLook.set(pos.x, pos.y + .78, pos.z);
+    // Follow tighter while moving so the camera does not lag behind a sprint,
+    // and lead slightly into the direction of travel.
+    camera.position.lerp(targetCamera, 1 - Math.exp(-delta * (movingRef.current ? 9 : 6)));
+    targetLook.set(pos.x, pos.y + (crouching ? .5 : .78), pos.z);
+    if (planarSpeed > .5) targetLook.x += nextX / planarSpeed * .45, targetLook.z += nextZ / planarSpeed * .45;
     camera.lookAt(targetLook);
     if (camera instanceof THREE.PerspectiveCamera) {
-      const nextFov = THREE.MathUtils.damp(camera.fov, sprinting ? 63 : 58, 5, delta);
+      const nextFov = THREE.MathUtils.damp(camera.fov, 58 + Math.min(6, planarSpeed * .8), 5, delta);
       if (Math.abs(nextFov - camera.fov) > .01) { camera.fov = nextFov; camera.updateProjectionMatrix(); }
     }
 
@@ -257,14 +397,15 @@ function Player({ pursuit, focus, controls, cameraYaw, cameraPitch, paused, play
       const near = POSTERS.some(([px, pz]) => Math.hypot(pos.x - px, pos.z - pz) < 3.1);
       if (near !== nearRef.current) { nearRef.current = near; onNearPoster(near); }
       onPosition(pos.x, pos.z, model.current?.rotation.y || 0);
-      onMotion({ speed: planarSpeed, stamina: stamina.current, grounded, sprinting });
+      onMotion({ speed: planarSpeed, stamina: stamina.current, grounded, sprinting, crouching });
     }
   });
 
   return <RigidBody ref={body} position={[spawn[0], .84, spawn[1]]} colliders={false} enabledRotations={[false, false, false]} linearDamping={.35} angularDamping={12} friction={1.2} gravityScale={1.35} canSleep={false} ccd>
     <CapsuleCollider args={[.46, .34]} friction={1.2} restitution={0} />
     <mesh position={[0, -.795, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={2}><circleGeometry args={[.42, 24]} /><meshBasicMaterial color="#05060a" transparent opacity={.48} depthWrite={false} /></mesh>
-    <group ref={model} position={[0, -.8, 0]} rotation={[0, initialHeading.current, 0]}><Humanoid color="#354757" skin="#a9654b" variant={0} moving={movingRef} pace={playerPace} /><mesh castShadow position={[0, 1.03, -.22]}><boxGeometry args={[.34, .48, .09]} /><meshStandardMaterial color="#141a28" metalness={.12} roughness={.5} /></mesh><mesh position={[0, 1.05, -.272]}><planeGeometry args={[.17, .22]} /><meshStandardMaterial color="#26c6d9" emissive="#126474" emissiveIntensity={.45} /></mesh></group>
+    <group ref={model} position={[0, -.8, 0]} rotation={[0, initialHeading.current, 0]}><Humanoid color="#354757" skin="#a9654b" variant={0} moving={movingRef} pace={playerPace} aim={aimPose} handItem={sidearm} /><mesh castShadow position={[0, 1.03, -.22]}><boxGeometry args={[.34, .48, .09]} /><meshStandardMaterial color="#141a28" metalness={.12} roughness={.5} /></mesh><mesh position={[0, 1.05, -.272]}><planeGeometry args={[.17, .22]} /><meshStandardMaterial color="#26c6d9" emissive="#126474" emissiveIntensity={.45} /></mesh>
+      </group>
   </RigidBody>;
 }
 
@@ -508,7 +649,7 @@ function usePoliceGeometry() {
 }
 
 function Civilian({ data, playerPosition, posterActive, onRecognize, paused, alias, wallMarked, signal }: { signal: StreetSignal | null; wallMarked: boolean; paused: boolean; alias: string; data: typeof NPCS[number]; playerPosition: MutableRefObject<THREE.Vector3>; posterActive: boolean; onRecognize: SceneProps['onRecognize'] }) {
-  const body = useRef<RapierRigidBody>(null);
+  const body = useRef<RapierRigidBody | null>(null);
   const visual = useRef<THREE.Group>(null);
   const moving = useRef(false);
   const target = useRef(1);
@@ -518,6 +659,13 @@ function Civilian({ data, playerPosition, posterActive, onRecognize, paused, ali
   const followedSignal = useRef(0);
   const diversion = useRef<Point[]>([]);
   const [speech, setSpeech] = useState('');
+  const downUntil = useRef(0);
+  const targets = useContext(TargetsContext);
+  const alarm = useContext(AlarmContext);
+  useEffect(() => {
+    targets.set(data.id, { body, downUntil, kind: 'civilian' });
+    return () => { targets.delete(data.id); };
+  }, [targets, data.id]);
   useEffect(() => { reacted.current = false; observation.current = 0; setSpeech(''); }, [wallMarked]);
   const points = data.path;
   const { rayClear, walkClear } = usePoliceGeometry();
@@ -527,6 +675,35 @@ function Civilian({ data, playerPosition, posterActive, onRecognize, paused, ali
     if (!rb || !node || paused) { moving.current = false; return; }
     const position = rb.translation();
     const velocity = rb.linvel();
+    const now = performance.now();
+    // A civilian who has been shot stays down for the rest of the run.
+    const down = downUntil.current > now;
+    node.rotation.z = THREE.MathUtils.damp(node.rotation.z, down ? -Math.PI / 2.1 : 0, 9, Math.min(delta, .05));
+    node.position.y = THREE.MathUtils.damp(node.position.y, down ? -1.2 : -.8, 9, Math.min(delta, .05));
+    if (down) {
+      moving.current = false;
+      rb.setLinvel({ x: 0, y: velocity.y, z: 0 }, true);
+      if (speech) setSpeech('');
+      return;
+    }
+    // Gunfire nearby scatters the street: people run from where it came from.
+    const panic = alarm.current && now < alarm.current.until ? alarm.current : null;
+    if (panic) {
+      const fx = position.x - panic.x, fz = position.z - panic.z;
+      const away = Math.hypot(fx, fz);
+      if (away < 26) {
+        if (speech) setSpeech('');
+        reacted.current = true;
+        diversion.current = [];
+        const blend = 1 - Math.exp(-Math.min(delta, .05) * 7);
+        const flee = data.speed * 2.1;
+        const nx = away > .2 ? fx / away : 1, nz = away > .2 ? fz / away : 0;
+        rb.setLinvel({ x: THREE.MathUtils.lerp(velocity.x, nx * flee, blend), y: velocity.y, z: THREE.MathUtils.lerp(velocity.z, nz * flee, blend) }, true);
+        node.rotation.y = THREE.MathUtils.damp(node.rotation.y, Math.atan2(nx, nz), 11, delta);
+        moving.current = true;
+        return;
+      }
+    }
     // Reading a sign is local and visibility-dependent, not a citywide command.
     if (!signal) diversion.current = [];
     if (signal && signal.intent !== 'mark' && followedSignal.current !== signal.sequence && Math.hypot(position.x - signal.origin.x, position.z - signal.origin.z) < 10 && rayClear(position, signal.origin, 1.4)) {
@@ -584,7 +761,7 @@ function Civilian({ data, playerPosition, posterActive, onRecognize, paused, ali
   </RigidBody>;
 }
 
-function PoliceOfficer({ position: spawn, playerPosition, active, awareness, onDetect, paused, pursuitActive, responseEnabled }: { responseEnabled: boolean; paused: boolean; pursuitActive: boolean; position: [number, number, number]; playerPosition: MutableRefObject<THREE.Vector3>; active: boolean; awareness: number; onDetect: SceneProps['onPoliceDetect'] }) {
+function PoliceOfficer({ position: spawn, playerPosition, active, live, onDetect, onFire, armed, paused, pursuitActive, responseEnabled }: { responseEnabled: boolean; paused: boolean; pursuitActive: boolean; armed: boolean; position: [number, number, number]; playerPosition: MutableRefObject<THREE.Vector3>; active: boolean; live: MutableRefObject<LiveSignals>; onDetect: SceneProps['onPoliceDetect']; onFire: SceneProps['onPoliceFire'] }) {
   const body = useRef<RapierRigidBody>(null);
   const visual = useRef<THREE.Group>(null);
   const moving = useRef(false);
@@ -592,29 +769,98 @@ function PoliceOfficer({ position: spawn, playerPosition, active, awareness, onD
   const planTimer = useRef(0);
   const pace = useRef(0);
   const path = useRef<Point[]>([]);
+  const fireTimer = useRef(POLICE_FIRE_INTERVAL);
+  const muzzle = useRef<THREE.Mesh>(null);
+  const muzzleLight = useRef<THREE.PointLight>(null);
+  const sidearm = useRef<THREE.Group>(null);
+  const tracer = useRef<THREE.Mesh>(null);
+  const muzzleUntil = useRef(0);
+  const shotRange = useRef(0);
+  const aimPose = useRef(false);
+  // Carried in the hand socket so it follows the arm, exactly like the player's.
+  const weapon = useMemo(() => <group ref={sidearm} position={[0, -.25, -.02]} rotation={[-1.3, 0, 0]}>
+    <mesh castShadow position={[0, .05, .03]}><boxGeometry args={[.075, .11, .36]} /><meshStandardMaterial color="#2f3641" metalness={.75} roughness={.3} /></mesh>
+    <mesh castShadow position={[0, -.07, -.06]} rotation={[.4, 0, 0]}><boxGeometry args={[.065, .16, .1]} /><meshStandardMaterial color="#1b202a" metalness={.4} roughness={.6} /></mesh>
+    <mesh ref={muzzle} position={[0, .05, .27]} visible={false}><sphereGeometry args={[.15, 8, 8]} /><meshBasicMaterial color="#ffe6b4" transparent opacity={.95} toneMapped={false} /></mesh>
+    <pointLight ref={muzzleLight} position={[0, .05, .3]} color="#ffca86" intensity={0} distance={7} />
+  </group>, []);
   const dispatch = useContext(DispatchContext);
+  const targets = useContext(TargetsContext);
+  const downUntil = useRef(0);
   const { rayClear, walkClear, world, rapier } = usePoliceGeometry();
   const officer = spawn.join(',');
+  useEffect(() => {
+    if (!active) return;
+    targets.set(officer, { body, downUntil, kind: 'officer' });
+    return () => { targets.delete(officer); };
+  }, [targets, officer, active]);
   useFrame((_, rawDelta) => {
     const rb = body.current, node = visual.current;
     if (!rb || !node || !active || paused || !responseEnabled) { moving.current = false; return; }
+    // A downed officer holds position, sees nothing and reports nothing.
+    const down = downUntil.current > 0 && performance.now() < downUntil.current;
+    node.rotation.z = THREE.MathUtils.damp(node.rotation.z, down ? -Math.PI / 2.1 : 0, 9, Math.min(rawDelta, .05));
+    node.position.y = THREE.MathUtils.damp(node.position.y, down ? -1.18 : -.8, 9, Math.min(rawDelta, .05));
+    if (down) {
+      moving.current = false; pace.current = 0; path.current = [];
+      rb.setLinvel({ x: 0, y: rb.linvel().y, z: 0 }, true);
+      timer.current += Math.min(rawDelta, .05);
+      if (timer.current >= .1) { timer.current = 0; onDetect({ visible: false, distance: 99, rate: 0, contact: false, source: 'officer' }, officer); }
+      return;
+    }
     const delta = Math.min(rawDelta, .05);
+    const { awareness, playerMoving, playerCrouching } = live.current;
     const position = rb.translation(), velocity = rb.linvel(), player = playerPosition.current;
     const dx = player.x - position.x, dz = player.z - position.z;
     const distance = Math.hypot(dx, dz);
     const facing = distance ? (Math.sin(node.rotation.y) * dx + Math.cos(node.rotation.y) * dz) / distance : 1;
     const detection = officerDetection(distance, facing, rayClear(position, player, 1.4),
-      pursuitActive || dispatch.current.remaining > 0, Math.abs(position.y - player.y));
+      pursuitActive || dispatch.current.remaining > 0, Math.abs(position.y - player.y), playerCrouching);
     detection.contact = detection.contact && walkClear(position, player);
     // Share only observed positions, never a hidden player's live coordinates.
     if (detection.visible) {
       dispatch.current.location = { x: player.x, z: player.z };
       dispatch.current.remaining = 12;
     }
+    // Armed units stop and shoot when they can see the player, instead of
+    // walking all the way in for an arrest.
+    const canShoot = armed && detection.visible && distance <= POLICE_RANGE && distance > 1.6;
+    aimPose.current = canShoot;
+    // The muzzle flash, its light, the recoil and the tracer all run off one
+    // clock so a shot reads as a single clear event.
+    const since = (performance.now() - (muzzleUntil.current - 90)) / 90;
+    const firing = since >= 0 && since <= 1;
+    if (muzzle.current) muzzle.current.visible = firing;
+    if (muzzleLight.current) muzzleLight.current.intensity = firing ? 26 * (1 - since) : 0;
+    if (tracer.current) {
+      tracer.current.visible = firing && shotRange.current > 1;
+      if (firing) {
+        tracer.current.position.z = shotRange.current / 2;
+        tracer.current.scale.z = shotRange.current;
+        (tracer.current.material as THREE.MeshBasicMaterial).opacity = .5 * (1 - since);
+      }
+    }
+    if (sidearm.current) sidearm.current.rotation.x = -1.3 - (firing ? (1 - since) * .45 : 0);
+
+    fireTimer.current -= delta;
+    // Only fire once they are actually pointed at the player, so the shot is
+    // clearly aimed rather than loosed off mid turn.
+    const bearing = Math.atan2(dx, dz) - node.rotation.y;
+    const aimed = Math.abs(Math.atan2(Math.sin(bearing), Math.cos(bearing))) < .3;
+    if (canShoot && aimed && fireTimer.current <= 0) {
+      fireTimer.current = POLICE_FIRE_INTERVAL;
+      muzzleUntil.current = performance.now() + 90;
+      shotRange.current = distance;
+      onFire({ officer, hit: policeShotHits(distance, playerMoving, Math.random()), distance });
+    }
+
     const goal = dispatch.current.remaining > 0 ? dispatch.current.location : null;
     const goalDistance = goal ? Math.hypot(goal.x - position.x, goal.z - position.z) : 0;
     planTimer.current -= delta;
-    if (goal && goalDistance > .8) {
+    // Close the distance first, then hold and shoot. Holding out at the edge of
+    // their range let the player simply walk away from an armed response.
+    const holding = canShoot && distance < POLICE_HOLD_RANGE;
+    if (goal && goalDistance > .8 && !holding) {
       if (planTimer.current <= 0) {
         path.current = findPolicePath(position, goal, walkClear);
         planTimer.current = .75;
@@ -623,15 +869,19 @@ function PoliceOfficer({ position: spawn, playerPosition, active, awareness, onD
     } else path.current = [];
     const next = path.current[0];
     let targetX = 0, targetZ = 0;
-    if (next && goalDistance > .8) {
+    // One heading wins per frame. Aiming at the player beats walking heading,
+    // which beats the idle look around; otherwise they spin while shooting.
+    let heading: number | null = canShoot ? Math.atan2(dx, dz) : null;
+    if (!holding && next && goalDistance > .8) {
       const nx = next.x - position.x, nz = next.z - position.z, length = Math.hypot(nx, nz);
       if (length > .05) {
         const speed = Math.min(policeSpeed(awareness, pursuitActive), Math.sqrt(2 * 14 * Math.max(0, goalDistance - .65)));
         targetX = nx / length * speed; targetZ = nz / length * speed;
-        const angle = Math.atan2(nx, nz);
-        node.rotation.y += Math.atan2(Math.sin(angle - node.rotation.y), Math.cos(angle - node.rotation.y)) * (1 - Math.exp(-10 * delta));
+        if (heading === null) heading = Math.atan2(nx, nz);
       }
-    } else node.rotation.y += delta * .7;
+    }
+    if (heading !== null) node.rotation.y = turnToward(node.rotation.y, heading, delta);
+    else if (!holding) node.rotation.y += delta * .7;
     const ground = world.castRay(new rapier.Ray({ x: position.x, y: position.y - .58, z: position.z },
       { x: 0, y: -1, z: 0 }), .32, true, undefined, undefined, undefined, rb);
     // Acceleration is bounded in m/s². Preserve gravity and limit air control.
@@ -648,7 +898,9 @@ function PoliceOfficer({ position: spawn, playerPosition, active, awareness, onD
   if (!active) return null;
   return <RigidBody ref={body} position={[spawn[0], .82, spawn[2]]} colliders={false} enabledRotations={[false, false, false]} linearDamping={.1} angularDamping={10} friction={.15} restitution={0} mass={1.05} canSleep={false} ccd>
     <CapsuleCollider args={[.46, .34]} friction={.15} restitution={0} />
-    <group ref={visual} position={[0, -.8, 0]}><Humanoid color="#243d62" skin="#a86e52" police variant={2} moving={moving} pace={pace} /><Html center position={[0, 2.05, 0]} distanceFactor={12}><div className="npc-tag police">VMPD</div></Html></group>
+    <group ref={visual} position={[0, -.8, 0]}><Humanoid color="#243d62" skin="#a86e52" police variant={2} moving={moving} pace={pace} aim={aimPose} handItem={armed ? weapon : undefined} />
+      <mesh ref={tracer} position={[0, 1.1, 0]} visible={false}><boxGeometry args={[.035, .035, 1]} /><meshBasicMaterial color="#ffd79a" transparent opacity={.5} toneMapped={false} depthWrite={false} /></mesh>
+      <Html center position={[0, 2.05, 0]} distanceFactor={12}><div className={`npc-tag police ${armed ? 'armed' : ''}`}>{armed ? 'VMPD ARMED' : 'VMPD'}</div></Html></group>
   </RigidBody>;
 }
 
@@ -690,8 +942,8 @@ function Billboard({ posterUrl, active, ad, accent }: { posterUrl: string; activ
 // A CanvasTexture, not useTexture: the surface is repainted several times a
 // second while the editor is open, and a suspending loader would both flash the
 // wall and grow drei's cache by one entry per exported frame.
-function useWallTexture(wall: WallId, image?: string) {
-  const blank = useMemo(() => makeWallCanvas(wall), [wall]);
+function useWallTexture(wall: WallId | 'tag', image?: string) {
+  const blank = useMemo(() => wall === 'tag' ? makeTagCanvas() : makeWallCanvas(wall), [wall]);
   const surface = useMemo(() => { const canvas = document.createElement('canvas'); canvas.width = 1200; canvas.height = 700; return canvas; }, []);
   const texture = useMemo(() => { const value = new THREE.CanvasTexture(surface); value.colorSpace = THREE.SRGBColorSpace; value.anisotropy = 4; return value; }, [surface]);
   useEffect(() => () => texture.dispose(), [texture]);
@@ -712,6 +964,27 @@ function useWallTexture(wall: WallId, image?: string) {
   return texture;
 }
 
+// Everything a round can hit registers here: officers and civilians alike.
+interface TargetHandle { body: MutableRefObject<RapierRigidBody | null>; downUntil: MutableRefObject<number>; kind: 'officer' | 'civilian' }
+const TargetsContext = createContext<Map<string, TargetHandle>>(new Map());
+// Where the last shot landed. Civilians within earshot scatter away from it.
+interface Alarm { x: number; z: number; until: number }
+const AlarmContext = createContext<MutableRefObject<Alarm | null>>({ current: null });
+
+// Paint sprayed onto arbitrary geometry, oriented to the surface it landed on.
+function TagDecal({ tag, image, focused }: { tag: Tag; image?: string; focused: boolean }) {
+  const texture = useWallTexture('tag', image);
+  const quaternion = useMemo(() => {
+    const normal = new THREE.Vector3(tag.normal[0], tag.normal[1], tag.normal[2]);
+    if (normal.lengthSq() < .0001) normal.set(0, 0, 1);
+    return new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal.normalize());
+  }, [tag.normal]);
+  return <group position={tag.point} quaternion={quaternion}>
+    <mesh><planeGeometry args={[TAG_WIDTH, TAG_HEIGHT]} /><meshBasicMaterial map={texture} transparent alphaTest={.04} toneMapped={false} polygonOffset polygonOffsetFactor={-4} /></mesh>
+    {focused && <mesh position={[0, 0, -.01]}><planeGeometry args={[TAG_WIDTH + .18, TAG_HEIGHT + .18]} /><meshBasicMaterial color="#7ef0ff" transparent opacity={.22} depthWrite={false} /></mesh>}
+  </group>;
+}
+
 function SignalWall({ wall, image, focused, targeted }: { wall: typeof WALLS[number]; image?: string; focused: boolean; targeted: boolean }) {
   const texture = useWallTexture(wall.id, image);
   return <RigidBody type="fixed" colliders={false} position={[wall.x, 0, wall.z]} rotation={[0, -Math.PI / 2, 0]}>
@@ -727,7 +1000,7 @@ function SignalWall({ wall, image, focused, targeted }: { wall: typeof WALLS[num
   </RigidBody>;
 }
 
-function World({ posterUrl, district, alias, signals, playerPosition, onRecognize, onPoliceDetect }: Pick<SceneProps, 'posterUrl' | 'district' | 'alias' | 'signals' | 'onRecognize' | 'onPoliceDetect'> & { playerPosition: MutableRefObject<THREE.Vector3> }) {
+function World({ posterUrl, district, alias, signals, live, playerPosition, onRecognize, onPoliceDetect, onPoliceFire }: Pick<SceneProps, 'posterUrl' | 'district' | 'alias' | 'signals' | 'live' | 'onRecognize' | 'onPoliceDetect' | 'onPoliceFire'> & { playerPosition: MutableRefObject<THREE.Vector3> }) {
   const theme = getDistrictTheme(district);
   const dispatch = useRef<Dispatch>({ location: null, remaining: 0 });
   const sensorTimer = useRef(0);
@@ -770,7 +1043,8 @@ function World({ posterUrl, district, alias, signals, playerPosition, onRecogniz
     {Array.from({ length: 8 }, (_, i) => -4.1 + i * 1.18).map((x) => <mesh key={x} position={[x, .04, 10]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[.72, 7.8]} /><meshBasicMaterial color="#d9d4c4" /></mesh>)}
 
     <DistrictArchitecture theme={theme} />
-    {WALLS.map(wall => <SignalWall key={wall.id} wall={wall} image={signals.wallImages[wall.id]} focused={signals.focusWall === wall.id} targeted={signals.targetWall === wall.id && signals.focusWall === null} />)}
+    {WALLS.map(wall => <SignalWall key={wall.id} wall={wall} image={signals.surfaceImages[wall.id]} focused={signals.focusSurface === wall.id} targeted={signals.targetSurface === wall.id && signals.focusSurface === null} />)}
+    {signals.tags.map(tag => <TagDecal key={tag.id} tag={tag} image={signals.surfaceImages[tag.id]} focused={signals.focusSurface === tag.id} />)}
 
     <RigidBody type="fixed" colliders={false}><CuboidCollider args={[55, 1.1, .5]} position={[0, 1.1, -71]} /><CuboidCollider args={[.5, 1.1, 72]} position={[-55, 1.1, 0]} /><CuboidCollider args={[.5, 1.1, 72]} position={[55, 1.1, 0]} /><CuboidCollider args={[22, 1.1, .5]} position={[-33, 1.1, 71]} /><CuboidCollider args={[22, 1.1, .5]} position={[33, 1.1, 71]} /></RigidBody>
     <Water color={theme.water} />
@@ -785,8 +1059,14 @@ function World({ posterUrl, district, alias, signals, playerPosition, onRecogniz
     {signals.posterActive && <><PosterStand url={posterUrl} position={[10.7, 0, -36]} rotation={-Math.PI / 2} /><PosterStand url={posterUrl} position={[-10.7, 0, -10]} rotation={Math.PI / 2} /><Poster url={posterUrl} position={[7, 1.65, 17]} /><PosterStand url={posterUrl} position={[13.5, 0, 37.4]} rotation={Math.PI} /></>}
     <Billboard posterUrl={posterUrl} active={signals.billboardActive} ad={theme.billboard} accent={theme.accent} />
     {NPCS.map((data) => <Civilian signal={signals.streetSignal} wallMarked={signals.wallMarked} paused={signals.paused} alias={alias} key={data.id} data={data} playerPosition={playerPosition} posterActive={signals.posterActive} onRecognize={onRecognize} />)}
-    <PoliceOfficer responseEnabled={signals.responseEnabled} paused={signals.paused} pursuitActive={signals.pursuitActive} position={[8, 0, 46]} playerPosition={playerPosition} active={signals.elapsed >= 14 || signals.responseEnabled} awareness={signals.awareness} onDetect={onPoliceDetect} />
-    {signals.wantedLevel >= 4 && <PoliceOfficer responseEnabled={signals.responseEnabled} paused={signals.paused} pursuitActive={signals.pursuitActive} position={[7, 0, 33]} playerPosition={playerPosition} active={signals.elapsed >= 20 || signals.responseEnabled} awareness={signals.awareness} onDetect={onPoliceDetect} />}
+    {POLICE_SPAWNS.map((spawn, index) => {
+      // The first two units are the ordinary patrol response. The rest are the
+      // backup that only rolls out once a weapon has been fired.
+      const active = index === 0 ? signals.elapsed >= 14 || signals.responseEnabled
+        : index === 1 ? signals.wantedLevel >= 4 && (signals.elapsed >= 20 || signals.responseEnabled)
+        : signals.armedResponse;
+      return <PoliceOfficer key={spawn.join(',')} armed={signals.armedResponse} live={live} onFire={onPoliceFire} responseEnabled={signals.responseEnabled} paused={signals.paused} pursuitActive={signals.pursuitActive} position={spawn} playerPosition={playerPosition} active={active} onDetect={onPoliceDetect} />;
+    })}
 
     {Array.from({ length: 18 }, (_, i) => {
       const x = -85 + (i % 9) * 21;
@@ -797,13 +1077,53 @@ function World({ posterUrl, district, alias, signals, playerPosition, onRecogniz
   </DispatchContext.Provider>;
 }
 
+// Hitscan against registered officers. Scene geometry between muzzle and
+// target blocks the shot, so cover actually protects both sides.
+function Gunplay({ live, playerBody, onShot }: { live: MutableRefObject<LiveSignals>; playerBody: MutableRefObject<RapierRigidBody | null>; onShot: SceneProps['onShot'] }) {
+  const registry = useContext(TargetsContext);
+  const alarm = useContext(AlarmContext);
+  const { world, rapier } = useRapier();
+  const { camera } = useThree();
+  const previous = useRef(0);
+  const direction = useMemo(() => new THREE.Vector3(), []);
+  useFrame(() => {
+    const token = live.current.fireToken;
+    if (token === previous.current) return;
+    previous.current = token;
+    camera.getWorldDirection(direction);
+    const now = performance.now();
+    const standing: ShotTarget[] = [];
+    registry.forEach((handle, id) => {
+      const position = handle.body.current?.translation();
+      if (!position || handle.downUntil.current > now) return;
+      standing.push({ id, x: position.x, y: position.y + .15, z: position.z });
+    });
+    const shot = resolveShot(camera.position, direction, standing, (_target, distance) => Boolean(
+      world.castRay(new rapier.Ray(camera.position, direction), Math.max(0, distance - .6), true,
+        undefined, undefined, undefined, playerBody.current ?? undefined)));
+    const handle = shot ? registry.get(shot.target.id) : undefined;
+    if (shot && handle) {
+      // Officers get back up and rejoin the search; a civilian stays down.
+      handle.downUntil.current = handle.kind === 'officer' ? now + DOWN_DURATION * 1000 : Number.MAX_SAFE_INTEGER;
+    }
+    // Everyone within earshot of the round scatters, hit or miss.
+    alarm.current = { x: shot ? shot.target.x : camera.position.x, z: shot ? shot.target.z : camera.position.z, until: now + PANIC_DURATION * 1000 };
+    onShot({ target: shot?.target.id ?? null, kind: handle?.kind ?? null });
+  });
+  return null;
+}
+
 export function NeonHarborScene(props: SceneProps) {
   const theme = getDistrictTheme(props.district);
   const playerPosition = useRef(new THREE.Vector3(theme.spawn[0], 1, theme.spawn[1]));
+  const playerBody = useRef<RapierRigidBody | null>(null);
   const blockers = useMemo(() => new Map<string, Box2D>(), []);
+  const targets = useMemo(() => new Map<string, TargetHandle>(), []);
+  const alarm = useRef<Alarm | null>(null);
   useEffect(() => { props.onReady(); }, [props.onReady]);
-  return <BlockersContext.Provider value={blockers}><Physics paused={props.signals.paused} gravity={[0, -9.81, 0]} timeStep={1 / 60} interpolate>
-    <World alias={props.alias} posterUrl={props.posterUrl} district={props.district} signals={props.signals} playerPosition={playerPosition} onRecognize={props.onRecognize} onPoliceDetect={props.onPoliceDetect} />
-    <Player pursuit={autoBoost(props.signals.awareness, props.signals.pursuitActive)} focus={props.signals.focusWall ? WALLS.find(wall => wall.id === props.signals.focusWall) ?? null : null} controls={props.controls} cameraYaw={props.cameraYaw} cameraPitch={props.cameraPitch} paused={props.signals.paused} playerPosition={playerPosition} spawn={theme.spawn} onNearPoster={props.onNearPoster} onPosition={props.onPosition} onMotion={props.onMotion} />
-  </Physics></BlockersContext.Provider>;
+  return <BlockersContext.Provider value={blockers}><TargetsContext.Provider value={targets}><AlarmContext.Provider value={alarm}><Physics paused={props.signals.paused} gravity={[0, -9.81, 0]} timeStep={1 / 60} interpolate>
+    <World alias={props.alias} posterUrl={props.posterUrl} district={props.district} signals={props.signals} live={props.live} playerPosition={playerPosition} onRecognize={props.onRecognize} onPoliceDetect={props.onPoliceDetect} onPoliceFire={props.onPoliceFire} />
+    <Player pursuitActive={props.signals.pursuitActive} live={props.live} focus={props.signals.focusPoint} bodyRef={playerBody} onAimSurface={props.onAimSurface} controls={props.controls} cameraYaw={props.cameraYaw} cameraPitch={props.cameraPitch} paused={props.signals.paused} playerPosition={playerPosition} spawn={theme.spawn} onNearPoster={props.onNearPoster} onPosition={props.onPosition} onMotion={props.onMotion} />
+    <Gunplay live={props.live} playerBody={playerBody} onShot={props.onShot} />
+  </Physics></AlarmContext.Provider></TargetsContext.Provider></BlockersContext.Provider>;
 }
