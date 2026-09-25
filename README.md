@@ -172,6 +172,30 @@ These screenshots show the current street-editing flow. The important connection
 
 The drawing tools are not decorative controls. The exported artwork remains visible when the editor closes. The pursuit and outcome screenshots show the surrounding game loop, not features supplied by the image editor itself.
 
+## What it does well
+
+**The editor is the whole game, not a step in it.** Five separate sessions, and each one changes something you can walk up to afterwards. The poster you customise is the poster on the billboard. The wall you paint is the wall people report you for.
+
+**Painting happens live, in 3D.** Open a surface and the editor sits beside the scene. Every changed export lands on that surface about once a second while patrols keep walking past. You watch the wall fill in as you draw it.
+
+**Almost anything upright is a canvas.** Three prepared walls plus any surface you can stand in front of. A raycast checks the angle and reach, then pins a transparent canvas to that exact spot at the right orientation. Floors and ceilings are out, everything else is fair game.
+
+**The police actually think.** Line of sight detection with real ray casts, A* pathfinding that routes them around buildings instead of through them, awareness that builds with distance and exposure, and a dispatch system that only knows where you were last seen. Crouch and they spot you at 62% of their usual range.
+
+**Movement is built on real physics.** Rapier handles gravity and collision. On top of that: acceleration limited velocity so you build speed and brake, coyote time after a ledge, jump buffering, a jump cut so a tap is smaller than a hold, and step-up so kerbs do not stop you dead.
+
+**Choices carry weight.** Painting starts a clock. Firing skips it entirely and pins your location. Hit a bystander and the street scatters while your record gets worse. Five seconds after your first shot the response arms up and shoots back.
+
+**Seven districts**, each with its own layout, landmarks, palette and atmosphere, all running through one shared scene system.
+
+**Recognition is simulated, by design.** Nothing analyses your photo. Whether someone recognises you comes down to poster activation, proximity and line of sight, which keeps it a game mechanic you can read and play around rather than a black box.
+
+**Runs entirely in the browser.** No backend, no account, no login. Your character, images and progress are kept in your own browser with IndexedDB, with a memory fallback if storage is blocked.
+
+**Built to degrade gracefully.** A WebGL check with a real fallback screen, editor load timeouts with retry, upload validation, and reduced motion support.
+
+**42 logic tests** covering the city simulation, police detection and pathfinding, wall response timing, movement and escape speeds, paintable surfaces and weapon state. They run in Node with `npm test`.
+
 ## Try the loop in two minutes
 
 1. Open [viceid.vercel.app](https://viceid.vercel.app) and enter the creator.
@@ -314,19 +338,6 @@ These are logic tests. They run in Node without a browser, so they cover the rul
 ### Deploying
 
 Vercel, Vite preset, repo root, `npm run build`, output `dist`. No environment variables.
-
-## What is real and what is not
-
-Worth being clear about, since the premise involves police records and facial recognition.
-
-- **No face analysis.** Nothing looks at your uploaded photo. Recognition is a gameplay simulation driven by poster activation, proximity and line of sight.
-- **Everything is fictional.** Vice Coast, VMPD, the districts, the dossier, the engagement numbers. Reputation comes from your choices and what happens in play, never from the image.
-- **The combat is fictional and optional.** You can finish a district without ever drawing the pistol.
-- **Local only.** Progress is saved to IndexedDB in one browser on one device. Nothing syncs. If storage is blocked the app falls back to memory and you lose progress when the tab closes.
-- **Exports are flattened.** Layers and undo history do not survive between editor sessions.
-- **Refreshing mid-district** drops you back at City Impact rather than restoring a physics simulation in progress.
-- **Not an open world.** This is a browser experience with a small playable city, not a full GTA-scale game, and your portrait does not become a 3D avatar.
-- **Browser dependent.** WebGL performance, native share and clipboard all vary by device and permissions.
 
 ## Against the challenge brief
 
