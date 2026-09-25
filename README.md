@@ -16,14 +16,6 @@ Inside the playable district, the persistent **Draw / Edit** dock brings Unlayer
 
 [Editor integration](#react-image-editor-is-the-core-creative-tool) · [Try the full journey](#try-the-full-editor-to-world-loop) · [Run locally](#run-locally)
 
-## Demo Video
-
-Watch the updated demo: identity creation, Unlayer React Image Editor, wanted posters, live wall painting, street signals and the playable city's response.
-
-[![Watch the VICE ID project demo](https://img.youtube.com/vi/aQzNXmiar8s/hqdefault.jpg)](https://youtu.be/aQzNXmiar8s)
-
-[Watch the full VICE ID demo on YouTube](https://youtu.be/aQzNXmiar8s)
-
 ## Product Walkthrough
 
 The first sections show the original identity-to-poster journey. The latest gameplay gallery below shows the always-available editing dock, live surface painting and current pursuit system. Older gameplay screenshots are retained as earlier views of the project. Select any image to open the larger version.
@@ -465,7 +457,7 @@ VICE ID is an original GTA VI-inspired identity and street-art experience built 
 | Let users customize at least one visual | Users can edit both personal images and multiple city surfaces using the native editor tools |
 | Public source and clear documentation | [VICE-ID on GitHub](https://github.com/Anand-240/VICE-ID), with setup steps and integration details in this README |
 | Deployed experience | [Live website](https://viceid.vercel.app) |
-| Demonstrate the experience | [Updated demo video](https://youtu.be/aQzNXmiar8s) and the screenshot galleries above |
+| Demonstrate the experience | The screenshot galleries above |
 
 The editor supplies the creative tools. VICE ID connects their image exports to the dossier, poster network, playable environment and final identity card. This README describes the implementation; it does not claim that the submission form or social-sharing steps have been completed.
 
