@@ -16,6 +16,13 @@ export interface StreetSignal {
 export function signalTarget(wall: { x: number; z: number }, intent: SignalIntent) {
   return { x: wall.x - 3, z: Math.max(-60, Math.min(60, wall.z + (intent === 'north' ? -14 : intent === 'south' ? 14 : 0))) };
 }
+// The three prepared surfaces are public fixtures out on the street, in full
+// view of passing traffic. Painting one is seen straight away, wherever the
+// player is standing. A free surface down a side street is not.
+export function isPublicSurface(id: string) {
+  return WALLS.some(wall => wall.id === id);
+}
+
 export function closestWall(x: number, z: number) {
   return WALLS.reduce((best, wall) => Math.hypot(x - wall.x, z - wall.z) < Math.hypot(x - best.x, z - best.z) ? wall : best);
 }

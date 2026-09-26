@@ -9,6 +9,7 @@ import { getDistrictTheme, type DistrictTheme } from './districts';
 import { findPolicePath, officerDetection, policeSpeed, type PoliceDetection, type ReportedLocation, type Point } from './police';
 import { WALLS, makeWallCanvas, type WallId, type StreetSignal } from './walls';
 import { makeTagCanvas, TAG_HEIGHT, TAG_RANGE, TAG_WIDTH, type FocusTarget, type SurfaceHit, type Tag } from './tags';
+import { CAUGHT_IN_ACT_RANGE, classifyWitness, hasInspected, MARK_INSPECT_RANGE, noticesMark, type WitnessReport } from './witness';
 import { PANIC_DURATION, aimElevation, AIM_FOV, AIM_HEIGHT, AIM_PULLBACK, AIM_SHOULDER, DOWN_DURATION, POLICE_FIRE_INTERVAL, POLICE_HOLD_RANGE, POLICE_RANGE, policeShotHits, resolveShot, type ShotTarget, type WeaponState } from './weapon';
 
 export type ControlState = Record<string, boolean>;
@@ -42,6 +43,8 @@ export interface SceneSignals {
   focusPoint: FocusTarget | null;
   targetSurface: string | null;
   tags: Tag[];
+  // Where paint has landed, so bystanders can notice it and go and look.
+  marks: { x: number; z: number }[];
 }
 
 // Values that change many times a second travel by ref, never as props: a
@@ -70,7 +73,7 @@ interface SceneProps {
   onNearPoster: (near: boolean) => void;
   onPosition: (x: number, z: number, heading: number) => void;
   onMotion: (motion: MotionTelemetry) => void;
-  onRecognize: (id: string, role: string, influencer: boolean, location: Point) => void;
+  onRecognize: (id: string, role: string, influencer: boolean, location: Point, report: WitnessReport) => void;
   onPoliceDetect: (detection: PoliceDetection, officer: string) => void;
   onReady: () => void;
 }
@@ -80,15 +83,15 @@ type Box2D = { x: number; z: number; w: number; d: number };
 
 const POSTERS: [number, number][] = [[10.7, -36], [-10.7, -10], [7, 17], [13.5, 37.4]];
 const NPCS = [
-  { id: 'racer', role: 'STREET RACER', color: '#e55b91', skin: '#8f513b', variant: 0, speed: 1.3, influencer: false, path: [[-6, 28], [-6, 10], [-8, -8], [-4, 16]] },
-  { id: 'influencer', role: 'INFLUENCER', color: '#8d73ff', skin: '#c78363', variant: 1, speed: 1.05, influencer: true, path: [[-8, 4], [-6, -12], [-7, -27], [-5, -5]] },
-  { id: 'worker', role: 'SHOP WORKER', color: '#85c99b', skin: '#70402f', variant: 2, speed: .9, influencer: false, path: [[8, 28], [7, 12], [9, 2], [7, 20]] },
-  { id: 'guest-a', role: 'CLUB VISITOR', color: '#ffb079', skin: '#d59b7b', variant: 3, speed: 1.15, influencer: false, path: [[-8, -8], [-7, -20], [-9, -31], [-5, -18]] },
-  { id: 'guest-b', role: 'CLUB VISITOR', color: '#50d8e8', skin: '#9b6048', variant: 4, speed: 1.1, influencer: false, path: [[-5, -30], [-8, -14], [-6, 2], [-7, -20]] },
-  { id: 'local-a', role: 'LOCAL', color: '#d8b868', skin: '#bd7c5e', variant: 5, speed: 1.0, influencer: false, path: [[6, 34], [8, 18], [5, 4], [7, 24]] },
-  { id: 'local-b', role: 'LOCAL', color: '#ce6f64', skin: '#63382e', variant: 1, speed: .95, influencer: false, path: [[4, -4], [7, -22], [6, -40], [8, -18]] },
-  { id: 'mechanic', role: 'MECHANIC', color: '#73a9db', skin: '#d3a17f', variant: 2, speed: .85, influencer: false, path: [[-12, 21], [-9, 34], [-6, 25], [-10, 14]] },
-  { id: 'harbor', role: 'HARBOR WORKER', color: '#db8c4d', skin: '#83503b', variant: 4, speed: .9, influencer: false, path: [[8, -40], [5, -52], [-2, -59], [7, -47]] },
+  { id: 'racer', role: 'STREET RACER', color: '#e55b91', skin: '#8f513b', variant: 0, speed: 1.65, influencer: false, path: [[-6, 28], [-6, 10], [-8, -8], [-4, 16]] },
+  { id: 'influencer', role: 'INFLUENCER', color: '#8d73ff', skin: '#c78363', variant: 1, speed: 1.35, influencer: true, path: [[-8, 4], [-6, -12], [-7, -27], [-5, -5]] },
+  { id: 'worker', role: 'SHOP WORKER', color: '#85c99b', skin: '#70402f', variant: 2, speed: 1.2, influencer: false, path: [[8, 28], [7, 12], [9, 2], [7, 20]] },
+  { id: 'guest-a', role: 'CLUB VISITOR', color: '#ffb079', skin: '#d59b7b', variant: 3, speed: 1.45, influencer: false, path: [[-8, -8], [-7, -20], [-9, -31], [-5, -18]] },
+  { id: 'guest-b', role: 'CLUB VISITOR', color: '#50d8e8', skin: '#9b6048', variant: 4, speed: 1.4, influencer: false, path: [[-5, -30], [-8, -14], [-6, 2], [-7, -20]] },
+  { id: 'local-a', role: 'LOCAL', color: '#d8b868', skin: '#bd7c5e', variant: 5, speed: 1.3, influencer: false, path: [[6, 34], [8, 18], [5, 4], [7, 24]] },
+  { id: 'local-b', role: 'LOCAL', color: '#ce6f64', skin: '#63382e', variant: 1, speed: 1.25, influencer: false, path: [[4, -4], [7, -22], [6, -40], [8, -18]] },
+  { id: 'mechanic', role: 'MECHANIC', color: '#73a9db', skin: '#d3a17f', variant: 2, speed: 1.15, influencer: false, path: [[-12, 21], [-9, 34], [-6, 25], [-10, 14]] },
+  { id: 'harbor', role: 'HARBOR WORKER', color: '#db8c4d', skin: '#83503b', variant: 4, speed: 1.2, influencer: false, path: [[8, -40], [5, -52], [-2, -59], [7, -47]] },
 ] as const;
 
 const q = new THREE.Quaternion();
@@ -648,7 +651,7 @@ function usePoliceGeometry() {
   return { rayClear, walkClear, world, rapier };
 }
 
-function Civilian({ data, playerPosition, posterActive, onRecognize, paused, alias, wallMarked, signal }: { signal: StreetSignal | null; wallMarked: boolean; paused: boolean; alias: string; data: typeof NPCS[number]; playerPosition: MutableRefObject<THREE.Vector3>; posterActive: boolean; onRecognize: SceneProps['onRecognize'] }) {
+function Civilian({ data, playerPosition, posterActive, onRecognize, paused, alias, wallMarked, signal, marks, painting }: { marks: { x: number; z: number }[]; painting: boolean; signal: StreetSignal | null; wallMarked: boolean; paused: boolean; alias: string; data: typeof NPCS[number]; playerPosition: MutableRefObject<THREE.Vector3>; posterActive: boolean; onRecognize: SceneProps['onRecognize'] }) {
   const body = useRef<RapierRigidBody | null>(null);
   const visual = useRef<THREE.Group>(null);
   const moving = useRef(false);
@@ -660,6 +663,9 @@ function Civilian({ data, playerPosition, posterActive, onRecognize, paused, ali
   const diversion = useRef<Point[]>([]);
   const [speech, setSpeech] = useState('');
   const downUntil = useRef(0);
+  const sawMark = useRef(false);
+  const inspecting = useRef<Point | null>(null);
+  const inspectTime = useRef(0);
   const targets = useContext(TargetsContext);
   const alarm = useContext(AlarmContext);
   useEffect(() => {
@@ -667,6 +673,7 @@ function Civilian({ data, playerPosition, posterActive, onRecognize, paused, ali
     return () => { targets.delete(data.id); };
   }, [targets, data.id]);
   useEffect(() => { reacted.current = false; observation.current = 0; setSpeech(''); }, [wallMarked]);
+  useEffect(() => { if (!marks.length) { sawMark.current = false; inspecting.current = null; } }, [marks.length]);
   const points = data.path;
   const { rayClear, walkClear } = usePoliceGeometry();
   useFrame((_, delta) => {
@@ -704,6 +711,37 @@ function Civilian({ data, playerPosition, posterActive, onRecognize, paused, ali
         return;
       }
     }
+    // Fresh paint draws a crowd. Anyone with a clear view walks over to read it,
+    // and from then on they can connect the mark to the face on the poster.
+    if (!sawMark.current && !inspecting.current && marks.length) {
+      for (const mark of marks) {
+        const range = Math.hypot(mark.x - position.x, mark.z - position.z);
+        if (noticesMark(range, rayClear(position, mark, 1.5))) {
+          inspecting.current = { x: mark.x, z: mark.z };
+          inspectTime.current = 0;
+          break;
+        }
+      }
+    }
+    if (inspecting.current) {
+      const goal = inspecting.current;
+      const range = Math.hypot(goal.x - position.x, goal.z - position.z);
+      inspectTime.current += delta;
+      // Something is in the way. Give up rather than shove into it forever.
+      if (inspectTime.current > 14) { inspecting.current = null; sawMark.current = true; }
+      else if (hasInspected(range)) {
+        sawMark.current = true;
+        inspecting.current = null;
+        if (!speech) { setSpeech('Someone tagged this. I know that face from the poster.'); window.setTimeout(() => setSpeech(''), 3600); }
+      } else {
+        const blend = 1 - Math.exp(-Math.min(delta, .05) * 6);
+        const pace = data.speed * 1.35;
+        rb.setLinvel({ x: THREE.MathUtils.lerp(velocity.x, (goal.x - position.x) / range * pace, blend), y: velocity.y, z: THREE.MathUtils.lerp(velocity.z, (goal.z - position.z) / range * pace, blend) }, true);
+        node.rotation.y = turnToward(node.rotation.y, Math.atan2(goal.x - position.x, goal.z - position.z), delta);
+        moving.current = true;
+        return;
+      }
+    }
     // Reading a sign is local and visibility-dependent, not a citywide command.
     if (!signal) diversion.current = [];
     if (signal && signal.intent !== 'mark' && followedSignal.current !== signal.sequence && Math.hypot(position.x - signal.origin.x, position.z - signal.origin.z) < 10 && rayClear(position, signal.origin, 1.4)) {
@@ -736,26 +774,33 @@ function Civilian({ data, playerPosition, posterActive, onRecognize, paused, ali
       moving.current = true;
     } else { const stop = 1 - Math.exp(-delta * 12); rb.setLinvel({ x: THREE.MathUtils.lerp(velocity.x, 0, stop), y: velocity.y, z: THREE.MathUtils.lerp(velocity.z, 0, stop) }, true); moving.current = false; }
     decision.current += delta;
-    if (decision.current < .2 || reacted.current || !posterActive) return;
+    if (decision.current < .2 || reacted.current) return;
     const observationStep = Math.min(decision.current, .3);
     decision.current = 0;
     const player = playerPosition.current;
-    const range = data.influencer ? 8.5 : 6.2;
     const pd = Math.hypot(player.x - position.x, player.z - position.z);
-    const knowsPoster = wallMarked || data.influencer || POSTERS.some(([x, z]) => Math.hypot(position.x - x, position.z - z) < 14);
-    const observing = knowsPoster && pd < range && rayClear(position, player, 1.4);
+    const clearOfPlayer = rayClear(position, player, 1.4);
+    // Watching someone actually paint needs no poster and no prior knowledge.
+    const caughtInAct = painting && pd < CAUGHT_IN_ACT_RANGE && clearOfPlayer;
+    const range = data.influencer ? 8.5 : 6.2;
+    const knowsPoster = sawMark.current || data.influencer || POSTERS.some(([x, z]) => Math.hypot(position.x - x, position.z - z) < 14);
+    const observing = caughtInAct || (posterActive && knowsPoster && pd < range && clearOfPlayer);
     observation.current = observing ? observation.current + observationStep : 0;
-    if (observation.current >= (data.influencer ? .8 : 1.4)) {
+    if (observation.current >= (caughtInAct ? .5 : data.influencer ? .8 : 1.4)) {
+      const report = classifyWitness(sawMark.current, caughtInAct, posterActive);
+      if (report === 'none') { observation.current = 0; return; }
       reacted.current = true;
       moving.current = false;
       rb.setLinvel({ x: 0, y: velocity.y, z: 0 }, true);
       node.rotation.y = Math.atan2(player.x - position.x, player.z - position.z);
-      setSpeech(wallMarked ? `That is ${alias}, by the marked wall. Calling VMPD!` : 'That face looks familiar. Is that you on the poster?');
-      onRecognize(data.id, data.role, data.influencer, { x: player.x, z: player.z });
+      setSpeech(report === 'caught' ? `You are painting that. I am calling VMPD!`
+        : report === 'linked' ? `That is ${alias} from the poster, and that mark is theirs. Calling it in!`
+        : 'That face looks familiar. Is that you on the poster?');
+      onRecognize(data.id, data.role, data.influencer, { x: player.x, z: player.z }, report);
       window.setTimeout(() => setSpeech(''), 4200);
     }
   });
-  return <RigidBody ref={body} position={[points[0][0], .82, points[0][1]]} colliders={false} enabledRotations={[false, false, false]} linearDamping={9} angularDamping={10} friction={1.1} restitution={0} mass={.85} canSleep={false} ccd>
+  return <RigidBody ref={body} position={[points[0][0], .82, points[0][1]]} colliders={false} enabledRotations={[false, false, false]} linearDamping={.2} angularDamping={10} friction={1.1} restitution={0} mass={.85} canSleep={false} ccd>
     <CapsuleCollider args={[.46, .34]} friction={1.1} restitution={0} />
     <group ref={visual} position={[0, -.8, 0]}><Humanoid color={data.color} skin={data.skin} variant={data.variant} moving={moving} />{speech && <Html center position={[0, 2.15, 0]} distanceFactor={10}><div className="npc-speech"><b>!</b>{speech}</div></Html>}</group>
   </RigidBody>;
@@ -1058,7 +1103,7 @@ function World({ posterUrl, district, alias, signals, live, playerPosition, onRe
 
     {signals.posterActive && <><PosterStand url={posterUrl} position={[10.7, 0, -36]} rotation={-Math.PI / 2} /><PosterStand url={posterUrl} position={[-10.7, 0, -10]} rotation={Math.PI / 2} /><Poster url={posterUrl} position={[7, 1.65, 17]} /><PosterStand url={posterUrl} position={[13.5, 0, 37.4]} rotation={Math.PI} /></>}
     <Billboard posterUrl={posterUrl} active={signals.billboardActive} ad={theme.billboard} accent={theme.accent} />
-    {NPCS.map((data) => <Civilian signal={signals.streetSignal} wallMarked={signals.wallMarked} paused={signals.paused} alias={alias} key={data.id} data={data} playerPosition={playerPosition} posterActive={signals.posterActive} onRecognize={onRecognize} />)}
+    {NPCS.map((data) => <Civilian marks={signals.marks} painting={signals.focusSurface !== null} signal={signals.streetSignal} wallMarked={signals.wallMarked} paused={signals.paused} alias={alias} key={data.id} data={data} playerPosition={playerPosition} posterActive={signals.posterActive} onRecognize={onRecognize} />)}
     {POLICE_SPAWNS.map((spawn, index) => {
       // The first two units are the ordinary patrol response. The rest are the
       // backup that only rolls out once a weapon has been fired.

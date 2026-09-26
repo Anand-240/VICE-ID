@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { closestWall, signalTarget, nearbyWall, targetedWall, wallResponseReady, WALLS } from '../src/game/walls.ts';
+import { closestWall, isPublicSurface, signalTarget, nearbyWall, targetedWall, wallResponseReady, WALLS } from '../src/game/walls.ts';
 import { advanceAwareness, officerDetection } from '../src/game/police.ts';
 
 test('poster suspicion cannot enable police response; first mark has ten seconds of grace', () => {
@@ -52,4 +52,12 @@ test('aiming picks the wall nearest the line of sight, not merely the nearest wa
   const market = WALLS.find(wall => wall.id === 'market');
   const toMarket = Math.atan2(market.x - 4, market.z - 6);
   assert.equal(targetedWall(4, 6, toMarket)?.id, 'market');
+});
+
+test('the prepared street surfaces are public, a free tag is not', () => {
+  // All three listed walls sit on the street and are seen when painted.
+  for (const wall of WALLS) assert.equal(isPublicSurface(wall.id), true);
+  // Marks the player pins to an arbitrary surface are not public fixtures.
+  assert.equal(isPublicSurface('tag-1'), false);
+  assert.equal(isPublicSurface('poster'), false);
 });
