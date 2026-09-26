@@ -666,6 +666,8 @@ function Civilian({ data, playerPosition, posterActive, onRecognize, paused, ali
   const sawMark = useRef(false);
   const inspecting = useRef<Point | null>(null);
   const inspectTime = useRef(0);
+  const stuckClock = useRef(0);
+  const lastSpot = useRef({ x: 0, z: 0 });
   const targets = useContext(TargetsContext);
   const alarm = useContext(AlarmContext);
   useEffect(() => {
@@ -734,9 +736,9 @@ function Civilian({ data, playerPosition, posterActive, onRecognize, paused, ali
         inspecting.current = null;
         if (!speech) { setSpeech('Someone tagged this. I know that face from the poster.'); window.setTimeout(() => setSpeech(''), 3600); }
       } else {
-        const blend = 1 - Math.exp(-Math.min(delta, .05) * 6);
         const pace = data.speed * 1.35;
-        rb.setLinvel({ x: THREE.MathUtils.lerp(velocity.x, (goal.x - position.x) / range * pace, blend), y: velocity.y, z: THREE.MathUtils.lerp(velocity.z, (goal.z - position.z) / range * pace, blend) }, true);
+        const step = approachVelocity(velocity, { x: (goal.x - position.x) / range * pace, z: (goal.z - position.z) / range * pace }, true, Math.min(delta, .05));
+        rb.setLinvel({ x: step.x, y: velocity.y, z: step.z }, true);
         node.rotation.y = turnToward(node.rotation.y, Math.atan2(goal.x - position.x, goal.z - position.z), delta);
         moving.current = true;
         return;
@@ -766,13 +768,26 @@ function Civilian({ data, playerPosition, posterActive, onRecognize, paused, ali
     const dx = tx - position.x;
     const dz = tz - position.z;
     const dist = Math.hypot(dx, dz);
-    if (dist < .35) target.current = (target.current + 1) % points.length;
+    if (dist < .35) { target.current = (target.current + 1) % points.length; stuckClock.current = 0; }
     else if (!speech) {
-      const blend = 1 - Math.exp(-delta * 5.5);
-      rb.setLinvel({ x: THREE.MathUtils.lerp(velocity.x, dx / dist * data.speed, blend), y: velocity.y, z: THREE.MathUtils.lerp(velocity.z, dz / dist * data.speed, blend) }, true);
-      node.rotation.y = THREE.MathUtils.damp(node.rotation.y, Math.atan2(dx, dz), 9, delta);
+      const step = approachVelocity(velocity, { x: dx / dist * data.speed, z: dz / dist * data.speed }, true, Math.min(delta, .05));
+      rb.setLinvel({ x: step.x, y: velocity.y, z: step.z }, true);
+      node.rotation.y = turnToward(node.rotation.y, Math.atan2(dx, dz), delta);
       moving.current = true;
-    } else { const stop = 1 - Math.exp(-delta * 12); rb.setLinvel({ x: THREE.MathUtils.lerp(velocity.x, 0, stop), y: velocity.y, z: THREE.MathUtils.lerp(velocity.z, 0, stop) }, true); moving.current = false; }
+      // Wedged against geometry or another pedestrian: take the next waypoint
+      // instead of leaning on the obstacle for the rest of the run.
+      stuckClock.current += delta;
+      if (stuckClock.current > 1.5) {
+        const travelled = Math.hypot(position.x - lastSpot.current.x, position.z - lastSpot.current.z);
+        if (travelled < .35) target.current = (target.current + 1) % points.length;
+        lastSpot.current = { x: position.x, z: position.z };
+        stuckClock.current = 0;
+      }
+    } else {
+      const step = approachVelocity(velocity, { x: 0, z: 0 }, true, Math.min(delta, .05));
+      rb.setLinvel({ x: step.x, y: velocity.y, z: step.z }, true);
+      moving.current = false;
+    }
     decision.current += delta;
     if (decision.current < .2 || reacted.current) return;
     const observationStep = Math.min(decision.current, .3);
@@ -800,8 +815,8 @@ function Civilian({ data, playerPosition, posterActive, onRecognize, paused, ali
       window.setTimeout(() => setSpeech(''), 4200);
     }
   });
-  return <RigidBody ref={body} position={[points[0][0], .82, points[0][1]]} colliders={false} enabledRotations={[false, false, false]} linearDamping={.2} angularDamping={10} friction={1.1} restitution={0} mass={.85} canSleep={false} ccd>
-    <CapsuleCollider args={[.46, .34]} friction={1.1} restitution={0} />
+  return <RigidBody ref={body} position={[points[0][0], .82, points[0][1]]} colliders={false} enabledRotations={[false, false, false]} linearDamping={.15} angularDamping={10} friction={.2} restitution={0} mass={.85} canSleep={false} ccd>
+    <CapsuleCollider args={[.46, .34]} friction={.2} restitution={0} />
     <group ref={visual} position={[0, -.8, 0]}><Humanoid color={data.color} skin={data.skin} variant={data.variant} moving={moving} />{speech && <Html center position={[0, 2.15, 0]} distanceFactor={10}><div className="npc-speech"><b>!</b>{speech}</div></Html>}</group>
   </RigidBody>;
 }
