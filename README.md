@@ -4,7 +4,7 @@
 
 Most image editors end the moment you hit save. VICE ID starts there.
 
-You create a character, edit their portrait with [Unlayer React Image Editor](https://github.com/unlayer/react-image-editor), and that exact export becomes a wanted poster across a fictional city called Vice Coast. Then you walk into that city in 3D and live with it. Pedestrians recognise the face you made. A witness calls it in. VMPD starts looking for you.
+You create a character, edit their portrait with [Unlayer React Image Editor](https://github.com/unlayer/react-image-editor), and that exact export becomes a wanted poster across Vice Coast, a fictional GTA VI inspired coastal city. Then you walk into that city in 3D and live with it. Pedestrians recognise the face you made. A witness calls it in. VMPD starts looking for you.
 
 The editor does not stay behind on the previous screen. Inside the district there is a **Draw / Edit** dock that is open from the first frame and never goes away. Stand in front of a wall, a shutter, a notice panel or almost any upright surface, and the editor opens on that surface. Your strokes land on it in 3D while the street keeps moving around you. Whether anyone finds out depends on where you painted. The three prepared street walls are public, so painting one is reported straight away. A surface you found yourself down a side street stays quiet until somebody walks past it, reads it, and connects it to the face on your poster.
 
@@ -352,14 +352,15 @@ Vercel, Vite preset, repo root, `npm run build`, output `dist`. No environment v
 
 | Asked for | What is here |
 | --- | --- |
-| An original GTA-inspired experience | A fictional coastal city where your edited identity, posters and street marks are the thing you play with |
+| A GTA VI inspired experience | Vice Coast, an original fictional coastal city where your edited identity, posters and street marks are the thing you play with. Original names and procedural characters, no Rockstar assets |
 | React Image Editor as a core component | Five editor sessions: portrait, poster, in-run poster remix, prepared walls, free surfaces. Remove it and the project has no creative loop left |
 | Let users customise at least one visual | Both personal images and city surfaces, using the editor's own tools |
 | Public repo and clear docs | [This repository](https://github.com/Anand-240/VICE-ID) |
 | A deployed link | [viceid.vercel.app](https://viceid.vercel.app) |
 | Show the experience | The screenshots above |
+| Share it with #BuiltWithImageEditor | The hashtag is at the top of this README, and the build is posted publicly under it |
 
-This README describes what the code does. It does not claim the submission form or social post steps are done.
+This README describes what the code does. The submission form is handled separately.
 
 ## Credits
 
