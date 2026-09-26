@@ -6,7 +6,7 @@ Most image editors end the moment you hit save. VICE ID starts there.
 
 You create a character, edit their portrait with [Unlayer React Image Editor](https://github.com/unlayer/react-image-editor), and that exact export becomes a wanted poster across a fictional city called Vice Coast. Then you walk into that city in 3D and live with it. Pedestrians recognise the face you made. A witness calls it in. VMPD starts looking for you.
 
-The editor does not stay behind on the previous screen. Inside the district there is a **Draw / Edit** dock that is open from the first frame and never goes away. Stand in front of a wall, a shutter, a notice panel or almost any upright surface, and the editor opens on that surface. Your strokes land on it in 3D while the street keeps moving around you. Then a camera logs the mark, a ten second dispatch clock starts, and you are standing still while you draw.
+The editor does not stay behind on the previous screen. Inside the district there is a **Draw / Edit** dock that is open from the first frame and never goes away. Stand in front of a wall, a shutter, a notice panel or almost any upright surface, and the editor opens on that surface. Your strokes land on it in 3D while the street keeps moving around you. Whether anyone finds out depends on where you painted. The three prepared street walls are public, so painting one is reported straight away. A surface you found yourself down a side street stays quiet until somebody walks past it, reads it, and connects it to the face on your poster.
 
 Built for Unlayer's [Build with React Image Editor Challenge](https://www.linkedin.com/posts/builtwithimageeditor-ugcPost-7501266289240240128-5qRa/).
 
@@ -180,7 +180,11 @@ The drawing tools are not decorative controls. The exported artwork remains visi
 
 **Almost anything upright is a canvas.** Three prepared walls plus any surface you can stand in front of. A raycast checks the angle and reach, then pins a transparent canvas to that exact spot at the right orientation. Floors and ceilings are out, everything else is fair game.
 
+**The city finds out through people, not a magic camera.** A bystander who can see fresh paint walks over to read it, and from then on can link that mark to the face on your poster. Recognising you without having seen a mark is only gossip. Having seen it, or watching you make it, is what puts someone on the phone to VMPD.
+
 **The police actually think.** Line of sight detection with real ray casts, A* pathfinding that routes them around buildings instead of through them, awareness that builds with distance and exposure, and a dispatch system that only knows where you were last seen. Crouch and they spot you at 62% of their usual range.
+
+**Pedestrians walk the district properly.** Waypoint routes on the same acceleration model the player uses, with recovery if one gets wedged against geometry, and they break off to investigate paint when they notice it.
 
 **Movement is built on real physics.** Rapier handles gravity and collision. On top of that: acceleration limited velocity so you build speed and brake, coyote time after a ledge, jump buffering, a jump cut so a tap is smaller than a hold, and step-up so kerbs do not stop you dead.
 
@@ -194,7 +198,7 @@ The drawing tools are not decorative controls. The exported artwork remains visi
 
 **Built to degrade gracefully.** A WebGL check with a real fallback screen, editor load timeouts with retry, upload validation, and reduced motion support.
 
-**42 logic tests** covering the city simulation, police detection and pathfinding, wall response timing, movement and escape speeds, paintable surfaces and weapon state. They run in Node with `npm test`.
+**49 logic tests** covering the city simulation, police detection and pathfinding, wall response timing and which surfaces are public, the witness model, movement and escape speeds, paintable surfaces and weapon state. They run in Node with `npm test`.
 
 ## Try the loop in two minutes
 
@@ -204,7 +208,7 @@ The drawing tools are not decorative controls. The exported artwork remains visi
 4. In the dossier, **Issue Wanted Poster**, then **Customize Poster** and add something obvious like text or a sticker.
 5. **Save & Preview**, then **Publish to City**.
 6. Enter a district, **Start Exploring**, and go find your poster on the street.
-7. Open **Draw / Edit**, pick a wall, and draw. Watch it appear on the wall behind the panel. The first stroke starts the ten second clock, so **Stop and Run** before it ends.
+7. Open **Draw / Edit**, pick one of the marked street walls, and draw. Watch it appear on the wall behind the panel. That wall is public, so the first stroke is reported and a ten second clock starts. Use **Stop and Run** before it ends.
 8. Walk up to any other upright surface and press **E** to paint that instead.
 9. Finish or leave the district, go through VICEFEED, and download your ID card and poster.
 
@@ -270,7 +274,11 @@ Movement runs on Rapier physics. Velocity is acceleration limited rather than sn
 
 Touch layouts get movement, run, jump, crouch, interact, aim and fire buttons, plus the same Draw / Edit dock.
 
-**Getting noticed.** Posters alone only make people suspicious. Painting a surface is what creates a reportable incident: the first stroke starts a ten second clock, then dispatch investigates. Witnesses who see you near a mark can report your position. Police awareness climbs when an officer has line of sight, faster the closer they are.
+**Getting noticed depends on where you paint.** The three prepared walls are public fixtures out on the street. Painting one is seen at once, a ten second clock starts, and VMPD comes to search that wall whether or not you are still standing there. You can trigger this from across the district through the dock.
+
+**A surface you found yourself is different.** Nothing happens. No clock, no police. It stays that way until a bystander with a clear view notices it, walks over to read it, and from then on knows what your face means. When that person later sees you, they call it in. Being watched while you paint is worse again and skips the middle step entirely.
+
+So recognition alone is only gossip. Somebody has to connect the mark to the face, or catch you making it, before anyone is dispatched. Police awareness then climbs while an officer has line of sight, faster the closer they are.
 
 **Crouching** drops you to a lower profile and officers spot you at 62% of their normal range, and identify you about 40% slower once they do.
 
@@ -316,7 +324,8 @@ src/
 │   ├── movement.ts                Walk, sprint, crouch and escape speeds
 │   ├── police.ts                  Detection, awareness, patrol pathfinding
 │   ├── weapon.ts                  Ammo, hitscan, damage, armed response
-│   ├── walls.ts                   Prepared walls, signals, dispatch delay
+│   ├── walls.ts                   Prepared public walls, signals, dispatch delay
+│   ├── witness.ts                 How a bystander turns a mark into a police call
 │   ├── tags.ts                    Paintable surfaces and decal placement
 │   └── districts.ts               Seven district configurations
 ├── lib/                           Poster and card composition, city sim, storage
@@ -331,7 +340,7 @@ src/
 npm test
 ```
 
-Seven files covering city simulation and district config, police detection and pathfinding, wall interaction and response gating, speeds and the escape boost, the locomotion model, paintable surfaces and patch limits, and weapon state.
+Eight files covering city simulation and district config, police detection and pathfinding, wall interaction and which surfaces are public, how a bystander turns a mark into a police call, speeds and the escape boost, the locomotion model, paintable surfaces and patch limits, and weapon state.
 
 These are logic tests. They run in Node without a browser, so they cover the rules, not the rendering. The editor itself, downloads, touch controls and anything visual still need checking by hand in a browser.
 
