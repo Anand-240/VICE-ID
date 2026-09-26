@@ -77,6 +77,7 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
   const responseEnabled = responseActive(wallResponseReady(wallAge), shotsFired);
   const responseRef = useRef(responseEnabled); responseRef.current = responseEnabled;
   const wallAgeRef = useRef(wallAge); wallAgeRef.current = wallAge;
+  const wallOpenRef = useRef(wallOpen); wallOpenRef.current = wallOpen;
   const [awarenessReason, setAwarenessReason] = useState('PATROL SEARCH');
   const [webgl] = useState(hasWebGL);
   const [loading, setLoading] = useState(true);
@@ -157,6 +158,9 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
   const openWallStudio = (id: string) => {
     if (wallOpen === id) return;
     controls.current = {}; dragging.current = false;
+    // Painting deliberately runs the world. Clear any pause left over from an
+    // earlier window blur, because the pause menu is hidden behind the studio.
+    setPaused(false);
     liveStroke.current = ''; setWallPainting(false);
     setWallSource(surfaceImages[id] || (WALLS.some(wall => wall.id === id) ? makeWallCanvas(id as WallId) : makeTagCanvas()));
     setWallReady(false); setWallNotice(''); setSignalIntent('mark'); setLastSurface(id); setWallOpen(id);
@@ -376,7 +380,7 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
     // The editor is an iframe, so clicking into it to draw blurs this window.
     // Pausing on that would freeze the district the instant painting starts,
     // which is the opposite of the point. A real tab switch still pauses.
-    const blur = () => { controls.current = {}; if (!wallOpen) setPaused(true); };
+    const blur = () => { controls.current = {}; if (!wallOpenRef.current) setPaused(true); };
     const hidden = () => { if (document.visibilityState === 'hidden') { controls.current = {}; setPaused(true); } };
     window.addEventListener('blur', blur);
     document.addEventListener('visibilitychange', hidden);
@@ -631,6 +635,7 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
     </section>}
     {wallOpen && <aside className="wall-studio" role="dialog" aria-label="Live wall painting studio">
       <header><div><small>UNLAYER REACT IMAGE EDITOR / LIVE ON THE {openSurface?.kind === 'tag' ? 'SURFACE' : 'WALL'}</small><h2>{(openSurface?.name ?? 'SURFACE').toUpperCase()}</h2></div><button className="secondary" onClick={closeWallStudio}><X /> STOP AND RUN</button></header>
+      {worldPaused && <button className="studio-frozen" onClick={() => setPaused(false)}>DISTRICT IS PAUSED. The dispatch clock and patrols are stopped. Click to resume.</button>}
       <div className="wall-studio-live" role="status">
         <span><small>SURFACE</small><b className={wallPainting ? 'hot' : ''}>{wallPainting ? 'PAINTING LIVE' : 'CLEAN'}</b></span>
         <span><small>AWARENESS</small><b className={awareness >= 50 ? 'hot' : ''}>{Math.round(awareness)}%</b></span>

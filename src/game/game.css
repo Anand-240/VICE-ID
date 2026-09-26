@@ -162,3 +162,5 @@
 .mobile-crouch{display:none}
 @media(max-width:900px){.mobile-crouch{width:62px;height:62px;border-radius:50%;border:1px solid #9fb2c4;background:rgba(8,11,18,.78);color:#f4e7d3;font:6px 'IBM Plex Mono',monospace;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}.mobile-crouch svg{width:15px}}
 @media(max-width:650px){.mobile-crouch{width:52px;height:52px}}
+.studio-frozen{display:block;width:100%;text-align:left;padding:11px 13px;border:1px solid #ffb27a;border-radius:4px;background:rgba(58,33,14,.92);color:#ffd9b5;font:11px/1.5 'IBM Plex Mono',monospace;cursor:pointer}
+.studio-frozen:hover{background:rgba(78,44,18,.95)}
