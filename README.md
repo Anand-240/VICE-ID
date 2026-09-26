@@ -28,7 +28,7 @@ There are five places you open React Image Editor, and every one of them feeds s
 
 ## Walkthrough
 
-The first screenshots are the identity and poster journey. The later ones show street painting, which is the newest part. Click any image for the full size.
+The first screenshots are the identity and poster journey. The later ones show street painting. They were captured while the project was being built, so some on screen wording has changed since, but each shot still shows the feature described under it. Click any image for the full size.
 
 <p align="center">
   <a href="docs/screenshots/01-landing.webp">
@@ -97,7 +97,7 @@ VICE ID places the published wanted poster inside the selected 3D district. The 
 | **Street panels and poster stands** | Make the edited asset discoverable at pedestrian level and give the player something physical to approach and inspect. |
 | **District billboard** | Displays the published poster after 25 seconds of active gameplay, or earlier when local buzz reaches 90. |
 | **Nearby witnesses** | Posters create suspicion. Once the player publishes a wall mark, nearby witnesses can report the character's location. |
-| **Police response** | The first wall stroke detected by the live editor starts a ten-second delay. Dispatch then investigates and sightings increase awareness. Poster recognition alone does not start pursuit; firing a weapon reports the player's location immediately. |
+| **Police response** | Painting one of the three public street walls is reported at once and starts a ten second delay before dispatch. A surface the player finds themselves is only reported once a bystander sees it and later recognises the face. Poster recognition alone does not start a pursuit; firing a weapon reports the player's location immediately. |
 | **Persistent visual identity** | The same saved poster appears in the city preview, dossier evidence, VICEFEED and poster downloads. The final identity card separately uses the edited portrait and updated story details. |
 
 Recognition is a fictional gameplay simulation based on poster activation, proximity and line of sight. The application does not analyse the uploaded face or perform real facial recognition.
@@ -155,7 +155,7 @@ These screenshots show the current street-editing flow. The important connection
   </tr>
   <tr>
     <td align="center"><b>Messages on the Club notice panel</b><br><sub>Unlayer's Text tool adds lettering to the panel. Signal Purpose controls the gameplay meaning separately from the written words.</sub></td>
-    <td align="center"><b>Your mark is live</b><br><sub>The artwork remains on the street surfaces after closing the editor. The first mark starts the dispatch countdown.</sub></td>
+    <td align="center"><b>Your mark is live</b><br><sub>The artwork stays on the surface after the editor closes. This one is a public street wall, so it is reported and the dispatch countdown is already running.</sub></td>
   </tr>
 </table>
 
