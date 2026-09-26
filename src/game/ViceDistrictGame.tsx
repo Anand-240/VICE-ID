@@ -230,6 +230,20 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
 
   useEffect(() => { if (captured && wallOpen) closeWallStudio(); }, [captured, wallOpen]);
 
+  // Counts the reported mark up to the dispatch threshold. Without this the
+  // objective sits at ten seconds forever and VMPD is never sent.
+  useEffect(() => {
+    if (worldPaused || wallAge === null || responseEnabled) return;
+    let previous = performance.now();
+    const timer = window.setInterval(() => {
+      const now = performance.now();
+      const delta = Math.min(.25, (now - previous) / 1000);
+      previous = now;
+      setWallAge(age => age === null ? null : Math.min(WALL_REPORT_DELAY, age + delta));
+    }, 100);
+    return () => clearInterval(timer);
+  }, [worldPaused, wallAge === null, responseEnabled]);
+
   useEffect(() => {
     if (!responseEnabled || dispatched.current || !wallIncident.current) return;
     dispatched.current = true;
@@ -359,11 +373,16 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
       if (key === 'escape' && !event.repeat && !pursuitPrompt && !captured && !summary) posterOpen ? setPosterOpen(false) : setPaused((value) => !value);
     };
     const up = (event: KeyboardEvent) => { controls.current[event.key.toLowerCase()] = false; };
-    const blur = () => { controls.current = {}; setPaused(true); };
+    // The editor is an iframe, so clicking into it to draw blurs this window.
+    // Pausing on that would freeze the district the instant painting starts,
+    // which is the opposite of the point. A real tab switch still pauses.
+    const blur = () => { controls.current = {}; if (!wallOpen) setPaused(true); };
+    const hidden = () => { if (document.visibilityState === 'hidden') { controls.current = {}; setPaused(true); } };
     window.addEventListener('blur', blur);
+    document.addEventListener('visibilitychange', hidden);
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
-    return () => { window.removeEventListener('blur', blur); window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
+    return () => { window.removeEventListener('blur', blur); document.removeEventListener('visibilitychange', hidden); window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
   }, [nearPoster, posterOpen, worldPaused, pursuitPrompt, captured, summary, wallOpen, posterEditing, nearestWall, aimedWall, freeSurface, wallAge, pursuitActive, lastSurface, surfaceImages, toggleWeapon, reloadWeapon, setAiming, shoot]);
 
   // A gunshot is the loudest possible tip-off: it hands VMPD your position,
