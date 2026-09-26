@@ -74,6 +74,7 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
   const wallIncident = useRef<Point | null>(null);
   const dispatched = useRef(false);
   const crimeCommitted = useRef(false);
+  const incidents = useRef(new Set<string>());
   const responseEnabled = responseActive(wallResponseReady(wallAge), shotsFired);
   const responseRef = useRef(responseEnabled); responseRef.current = responseEnabled;
   const wallAgeRef = useRef(wallAge); wallAgeRef.current = wallAge;
@@ -178,15 +179,21 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
   // are public fixtures on the street, so painting one is reported at once even
   // if you did it from across the district. A surface you found yourself, down a
   // side street, stays quiet until somebody actually walks past it.
+  // Tracked per surface, not once per run. A quiet tag down a side street must
+  // not stop a later public wall from raising the alarm.
   const beginIncident = (id: string) => {
+    if (incidents.current.has(id)) return;
     const surface = paintSurface(id);
     if (!surface) return;
+    incidents.current.add(id);
     wallIncident.current = signalTarget({ x: surface.point.x, z: surface.point.z }, 'mark');
     crimeCommitted.current = true;
     recognized.current.clear();
     if (isPublicSurface(id)) {
-      setWallAge(0);
       setPoliceReports(value => value + 1);
+      // Already dispatched to an earlier mark: this is a fresh address for them.
+      if (wallAgeRef.current !== null && responseRef.current) setReport({ ...wallIncident.current, sequence: ++reportSequence.current });
+      else if (wallAgeRef.current === null) setWallAge(0);
       setNotification({ icon: 'police', title: 'THE STREET SAW THAT', body: `The ${surface.name.toLowerCase()} is in public view. VMPD is dispatched to it in ${WALL_REPORT_DELAY} seconds and will search the area, whether or not you are standing there.` });
       return;
     }
@@ -208,8 +215,9 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
     if (!surface) { closeWallStudio(); return; }
     wallIncident.current = signalTarget({ x: surface.point.x, z: surface.point.z }, signalIntent);
     setStreetSignal({ sequence: ++reportSequence.current, origin: { x: surface.point.x - .6, z: surface.point.z }, target: wallIncident.current, intent: signalIntent, expires: elapsed + 25 });
-    if (!crimeCommitted.current) beginIncident(wallOpen);
-    else if (responseEnabled) setReport({ ...wallIncident.current, sequence: ++reportSequence.current });
+    beginIncident(wallOpen);
+    // Publishing an already reported mark gives dispatch a fresh address.
+    if (responseEnabled) setReport({ ...wallIncident.current, sequence: ++reportSequence.current });
     closeWallStudio();
     setNotification({ icon: 'alert', title: signalIntent === 'mark' ? 'MARK LEFT ON WALL' : 'FALSE TRAIL PLANTED', body: signalIntent === 'mark' ? 'Your design is visible. Move before dispatch responds.' : 'Nearby readers follow your direction. Dispatch checks that lead after the delay, but direct sightings reveal your real position.' });
   };
@@ -227,7 +235,7 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
       liveStroke.current = image;
       setWallPainting(true);
       setSurfaceImages(images => ({ ...images, [surface]: image }));
-      if (first && !crimeCommitted.current) beginIncident(surface);
+      if (first) beginIncident(surface);
     }, 850);
     return () => clearInterval(timer);
   }, [wallOpen, wallReady, worldPaused, tags]);
@@ -532,7 +540,7 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
     setTags([]); tagSequence.current = 0; setAimSurface(null);
     setWeapon(HOLSTERED); setFireToken(0); setOfficersDown(0); setShotsFired(0); setCiviliansDown(0);
     setHealth(PLAYER_HEALTH); setArmedAt(null); setUnderFire(0); setDowned(false); lastHit.current = 0;
-    crimeCommitted.current = false; dispatched.current = false;
+    crimeCommitted.current = false; dispatched.current = false; incidents.current.clear();
     setEscaped(false);
     controls.current = {};
     cameraYaw.current = theme.startYaw;
