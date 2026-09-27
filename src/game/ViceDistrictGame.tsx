@@ -194,7 +194,7 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
       // Already dispatched to an earlier mark: this is a fresh address for them.
       if (wallAgeRef.current !== null && responseRef.current) setReport({ ...wallIncident.current, sequence: ++reportSequence.current });
       else if (wallAgeRef.current === null) setWallAge(0);
-      setNotification({ icon: 'police', title: 'THE STREET SAW THAT', body: `The ${surface.name.toLowerCase()} is in public view. VMPD is dispatched to it in ${WALL_REPORT_DELAY} seconds and will search the area, whether or not you are standing there.` });
+      setNotification({ icon: 'police', title: 'THE STREET SAW THAT', body: `The ${surface.name.toLowerCase()} is in public view. VMPD is dispatched to it in ${WALL_REPORT_DELAY} seconds and searches that wall, not you. Paint one from across the district when you want them looking somewhere you are not.` });
       return;
     }
     setNotification({ icon: 'poster', title: 'MARK IS LIVE, UNNOTICED', body: `Your paint is on a surface off the street. Nobody has reported it. Anyone who walks past will come and read it, and will know your face afterwards.` });
@@ -630,7 +630,7 @@ export function ViceDistrictGame({ onContinue, onReturn }: Props) {
       <button className="studio-dock-toggle" aria-expanded={dockOpen} onClick={() => setDockOpen(value => !value)}><Brush /><b>DRAW / EDIT</b><small>ALWAYS ON · Q</small><ChevronDown /></button>
       {dockOpen && <div className="studio-dock-body">
         <button className={lastSurface === 'poster' ? 'active' : ''} onClick={openPosterStudio}><b>WANTED POSTER</b><small>{livePoster ? 'Your edit is live citywide' : 'Draw, letter or sticker it'}</small></button>
-        {WALLS.map(wall => <button key={wall.id} className={lastSurface === wall.id ? 'active' : ''} onClick={() => openWallStudio(wall.id)}><b>{wall.name.toUpperCase()}</b><small>{surfaceImages[wall.id] ? 'Painted. Public street wall' : 'Public street wall, painting it is reported'}</small></button>)}
+        {WALLS.map(wall => <button key={wall.id} className={lastSurface === wall.id ? 'active' : ''} onClick={() => openWallStudio(wall.id)}><b>{wall.name.toUpperCase()}</b><small>{surfaceImages[wall.id] ? 'Painted. Public street wall' : 'Public. Reported at once, and they search the wall'}</small></button>)}
         <button className={`dock-free ${freeSurface ? 'ready' : ''}`} disabled={!freeSurface} onClick={openFreeSurface}><b>SURFACE IN FRONT OF YOU</b><small>{freeSurface ? `Out of sight until someone walks past · ${tags.length}/${MAX_TAGS} used` : 'Walk up and face a wall, shutter or column'}</small></button>
         <p>Open any surface at any time, walking or mid-pursuit. Painting does not pause the district: patrols keep moving while you work, so watch the awareness meter.</p>
       </div>}

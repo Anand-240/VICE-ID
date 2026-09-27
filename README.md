@@ -276,7 +276,7 @@ Movement runs on Rapier physics. Velocity is acceleration limited rather than sn
 
 Touch layouts get movement, run, jump, crouch, interact, aim and fire buttons, plus the same Draw / Edit dock.
 
-**Getting noticed depends on where you paint.** The three prepared walls are public fixtures out on the street. Painting one is seen at once, a ten second clock starts, and VMPD comes to search that wall whether or not you are still standing there. You can trigger this from across the district through the dock.
+**Getting noticed depends on where you paint.** The three prepared walls are public fixtures out on the street. Painting one is seen at once, a ten second clock starts, and VMPD comes to search that wall. Note what they search: the wall, not you. Since the dock reaches every prepared wall from anywhere in the district, you can tag a distant one on purpose and send the response somewhere you are not.
 
 **A surface you found yourself is different.** Nothing happens. No clock, no police. It stays that way until a bystander with a clear view notices it, walks over to read it, and from then on knows what your face means. When that person later sees you, they call it in. Being watched while you paint is worse again and skips the middle step entirely.
 
