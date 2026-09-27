@@ -192,6 +192,8 @@ The drawing tools are not decorative controls. The exported artwork remains visi
 
 **Seven districts**, each with its own layout, landmarks, palette and atmosphere, all running through one shared scene system.
 
+**A minimap that tells you what matters.** Roads drawn from the district's own layout, your position and heading, published posters once they go up, and cyan diamonds marking every paintable street wall. It shows when a patrol is active but deliberately never shows you where officers are.
+
 **Recognition is simulated, by design.** Nothing analyses your photo. Whether someone recognises you comes down to poster activation, proximity and line of sight, which keeps it a game mechanic you can read and play around rather than a black box.
 
 **Runs entirely in the browser.** No backend, no account, no login. Your character, images and progress are kept in your own browser with IndexedDB, with a memory fallback if storage is blocked.
